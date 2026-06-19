@@ -54,26 +54,18 @@ class BashanPOSSystem {
     }
     
     // ============ UI SETUP ============
-setupUI() {
-    document.querySelector('.badge-name').textContent = this.user.name;
-    
-    if (this.user.role === 'manager') {
-        document.querySelector('.badge-role').textContent = '🔑 Manager';
-        document.querySelector('.badge-role').style.color = '#ffd740';
+    setupUI() {
+        // User badge
+        document.querySelector('.badge-name').textContent = this.user.name;
+        document.querySelector('.badge-role').textContent = this.user.role;
         
-        // Show manager buttons
-        document.getElementById('inventoryBtn').style.display = 'flex';
-        document.getElementById('settingsBtn').style.display = 'flex';
-        document.getElementById('reportsBtn').style.display = 'flex';
-    } else {
-        document.querySelector('.badge-role').textContent = '👤 Seller';
-        
-        // Hide manager buttons
-        document.getElementById('inventoryBtn').style.display = 'none';
-        document.getElementById('settingsBtn').style.display = 'none';
-        document.getElementById('reportsBtn').style.display = 'none';
+        // Role-based restrictions
+        if (this.user.role === 'seller') {
+            // Seller can't access some features
+            document.getElementById('reportsBtn').style.display = 'none';
+        }
     }
-}
+    
     setupClock() {
         const updateClock = () => {
             const now = new Date();
