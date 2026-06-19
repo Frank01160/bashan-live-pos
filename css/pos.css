@@ -1077,3 +1077,14 @@
         flex-direction: column;
     }
 }
+.nav-btn {
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-btn:hover {
+    color: var(--green-accent);
+    border-color: var(--green-primary);
+}
