@@ -270,8 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function redirectToPOS(role) {
-        window.location.href = 'pos.html';
-    }
+    // Store the role so POS page knows who logged in
+    window.location.href = 'pos.html';
+}
     
     function checkOnlineStatus() {
         if (!navigator.onLine) {
