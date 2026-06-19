@@ -59,11 +59,13 @@ class BashanPOSSystem {
         document.querySelector('.badge-name').textContent = this.user.name;
         document.querySelector('.badge-role').textContent = this.user.role;
         
-        // Role-based restrictions
-        if (this.user.role === 'seller') {
-            // Seller can't access some features
-            document.getElementById('reportsBtn').style.display = 'none';
-        }
+    // Role-based restrictions
+if (this.user.role === 'seller') {
+    document.getElementById('reportsBtn').style.display = 'none';
+} else if (this.user.role === 'manager') {
+    document.getElementById('reportsBtn').style.display = 'flex';
+    document.querySelector('.badge-role').style.background = '#ffd740';
+}
     }
     
     setupClock() {
