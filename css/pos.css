@@ -1077,14 +1077,103 @@
         flex-direction: column;
     }
 }
-.nav-btn {
-    text-decoration: none;
+/* ============================================ */
+/* FLOATING MANAGER MENU                        */
+/* ============================================ */
+
+.floating-menu {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 999;
+}
+
+/* Main FAB Button */
+.fab-main {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a5632, #2d8a4e);
+    border: 2px solid #4caf50;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
 }
 
-.nav-btn:hover {
-    color: var(--green-accent);
-    border-color: var(--green-primary);
+.fab-main:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
+    background: linear-gradient(135deg, #2d8a4e, #4caf50);
+}
+
+.fab-main.active {
+    background: #4caf50;
+    transform: rotate(90deg);
+}
+
+/* Sub-menu */
+.fab-submenu {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+}
+
+.fab-submenu.open {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0);
+}
+
+/* Sub-menu items */
+.fab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(26, 86, 50, 0.95);
+    border: 1px solid #4caf50;
+    border-radius: 25px;
+    padding: 12px 20px;
+    color: white;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.fab-item:hover {
+    background: #2d8a4e;
+    transform: translateX(-5px);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.fab-item span {
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .floating-menu {
+        bottom: 20px;
+        right: 20px;
+    }
+    
+    .fab-main {
+        width: 50px;
+        height: 50px;
+    }
 }
