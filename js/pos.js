@@ -62,19 +62,22 @@ setupUI() {
     if (this.user.role === 'manager') {
         document.querySelector('.badge-role').textContent = '🔑 Manager';
         document.querySelector('.badge-role').style.color = '#ffd740';
+        document.querySelector('.badge-role').style.background = '#ffd740';
+        
+        // SHOW MANAGER NAV BUTTONS
+        document.getElementById('reportsBtn').style.display = 'flex';
+        document.getElementById('inventoryBtn').style.display = 'flex';
+        document.getElementById('settingsBtn').style.display = 'flex';
+        
     } else {
         document.querySelector('.badge-role').textContent = '👤 Seller';
         document.getElementById('reportsBtn').style.display = 'none';
-    }
-    
-    // Manager can access everything
-    if (this.user.role === 'manager') {
-        document.getElementById('reportsBtn').style.display = 'flex';
+        document.getElementById('inventoryBtn').style.display = 'none';
+        document.getElementById('settingsBtn').style.display = 'none';
     }
     
     console.log('Logged in as:', this.user.role);
 }
-    
     setupClock() {
         const updateClock = () => {
             const now = new Date();
