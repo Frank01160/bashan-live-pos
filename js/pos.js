@@ -54,17 +54,50 @@ class BashanPOSSystem {
     }
     
     // ============ UI SETUP ============
-    setupUI() {
-        // User badge
-        document.querySelector('.badge-name').textContent = this.user.name;
-        document.querySelector('.badge-role').textContent = this.user.role;
-        
-        // Role-based restrictions
-        if (this.user.role === 'seller') {
-            // Seller can't access some features
-            document.getElementById('reportsBtn').style.display = 'none';
-        }
+setupUI() {
+    // User badge
+    document.querySelector('.badge-name').textContent = this.user.name;
+    document.querySelector('.badge-role').textContent = this.user.role;
+    
+    // Role-based restrictions
+    if (this.user.role === 'seller') {
+        // Seller can't access some features
+        document.getElementById('reportsBtn').style.display = 'none';
     }
+    
+    // ========== FLOATING MANAGER MENU ==========
+    
+    // Show floating menu ONLY for managers
+    if (this.user.role === 'manager') {
+        document.getElementById('floatingMenu').style.display = 'block';
+    }
+    
+    // FAB click toggle
+    document.getElementById('fabMain').addEventListener('click', () => {
+        document.getElementById('fabMain').classList.toggle('active');
+        document.getElementById('fabSubmenu').classList.toggle('open');
+    });
+    
+    // Close submenu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.floating-menu')) {
+            document.getElementById('fabMain').classList.remove('active');
+            document.getElementById('fabSubmenu').classList.remove('open');
+        }
+    });
+    
+    // Reports button in FAB
+    document.getElementById('fabReports').addEventListener('click', () => {
+        document.getElementById('fabMain').classList.remove('active');
+        document.getElementById('fabSubmenu').classList.remove('open');
+        this.openReports();
+    });
+    
+    // Logout in FAB
+    document.getElementById('fabLogout').addEventListener('click', () => {
+        BashanPOS.logout();
+    });
+}
     
     setupClock() {
         const updateClock = () => {
