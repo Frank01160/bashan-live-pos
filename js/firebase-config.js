@@ -3,7 +3,6 @@
 // Firebase Configuration & Core Functions
 // ============================================
 
-// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyB5eH7B9IbQb-slA6rphFhGhGwyXfj3moE",
   authDomain: "bashan-pos-c539b.firebaseapp.com",
@@ -16,13 +15,14 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const auth = firebase.auth();
+// We don't use Firebase Auth - we use custom password hashing
 
 // Enable offline persistence
 db.enablePersistence()
     .then(() => console.log('✅ Offline mode enabled'))
     .catch(err => console.log('⚠️ Persistence error:', err.code));
 
+// ... rest of the file stays the same
 // ============================================
 // COLLECTION REFERENCES
 // ============================================
@@ -428,7 +428,7 @@ function showConfirm(message) {
 // EXPORT FOR OTHER SCRIPTS
 // ============================================
 window.BashanPOS = {
-    db, auth,
+    db, 
     productsRef, categoriesRef, salesRef, stockLogRef, settingsRef, auditLogRef,
     verifyPassword, updatePassword, checkAuth, logout, saveSession,
     getProducts, getProductsRealtime, updateStock, completeSale,
