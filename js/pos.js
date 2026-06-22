@@ -23,7 +23,21 @@ class BashanPOSSystem {
         this.init();
     }
     
-    async init() {
+
+
+  async init() {
+    // Check if BashanPOS is loaded
+    if (!window.BashanPOS) {
+        console.error('❌ BashanPOS not loaded. Retrying in 1 second...');
+        setTimeout(() => this.init(), 1000);
+        return;
+    }
+    
+    // Check auth
+    this.user = BashanPOS.checkAuth();
+    if (!this.user) return;
+    
+    // ... rest of your init code
         // Check auth
         this.user = BashanPOS.checkAuth();
         if (!this.user) return;
