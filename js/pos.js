@@ -447,58 +447,66 @@ setupUI() {
         this.updateCartSummary();
         this.saveCart();
     }
-    
     renderCart() {
-        const cartContainer = document.getElementById('cartItems');
+    const cartContainer = document.getElementById('cartItems');
+    
+    if (this.cart.length === 0) {
+        cartContainer.innerHTML = `
+            <div class="cart-empty">
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+                    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+                <p>No items in basket</p>
+                <span>Click products to add</span>
+            </div>
+        `;
+        return;
+    }
+    
+    cartContainer.innerHTML = this.cart.map((item, index) => {
+        // FIX: Ensure values are valid numbers
+        const qtyNgunia = (item.qtyNgunia && !isNaN(item.qtyNgunia)) ? item.qtyNgunia : 0;
+        const qtyKg = (item.qtyKg && !isNaN(item.qtyKg)) ? item.qtyKg : 0;
+        const nguniaSize = (item.nguniaSize && !isNaN(item.nguniaSize)) ? item.nguniaSize : 1000;
+        const pricePerKg = (item.pricePerKg && !isNaN(item.pricePerKg)) ? item.pricePerKg : 0;
+        const subtotal = qtyKg * pricePerKg;
         
-        if (this.cart.length === 0) {
-            cartContainer.innerHTML = `
-                <div class="cart-empty">
-                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
-                        <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                    </svg>
-                    <p>No items in basket</p>
-                    <span>Click products to add</span>
+        return `
+        <div class="cart-item">
+            <div class="cart-item-header">
+                <span class="cart-item-name">${item.name}</span>
+                <button class="remove-item-btn" onclick="posSystem.removeFromCart(${index})" title="Remove">×</button>
+            </div>
+            <div class="cart-item-inputs">
+                <div class="qty-input-group">
+                    <div class="qty-label">Ngunias</div>
+                    <input type="number" 
+                           class="qty-input" 
+                           value="${qtyNgunia.toFixed(3)}" 
+                           step="0.001" 
+                           min="0"
+                           onchange="posSystem.updateCartItemQuantity(${index}, 'ngunia', this.value)">
+                    <div class="qty-unit">1 ngunia = ${nguniaSize}kg</div>
                 </div>
-            `;
-            return;
-        }
-        
-        cartContainer.innerHTML = this.cart.map((item, index) => `
-            <div class="cart-item">
-                <div class="cart-item-header">
-                    <span class="cart-item-name">${item.name}</span>
-                    <button class="remove-item-btn" onclick="posSystem.removeFromCart(${index})" title="Remove">×</button>
-                </div>
-                <div class="cart-item-inputs">
-                    <div class="qty-input-group">
-                        <div class="qty-label">Ngunias</div>
-                        <input type="number" 
-                               class="qty-input" 
-                               value="${item.qtyNgunia.toFixed(3)}" 
-                               step="0.001" 
-                               min="0"
-                               onchange="posSystem.updateCartItemQuantity(${index}, 'ngunia', this.value)">
-                        <div class="qty-unit">1 ngunia = ${item.nguniaSize}kg</div>
-                    </div>
-                    <div class="qty-input-group">
-                        <div class="qty-label">Kilograms</div>
-                        <input type="number" 
-                               class="qty-input" 
-                               value="${item.qtyKg.toFixed(2)}" 
-                               step="0.01" 
-                               min="0"
-                               onchange="posSystem.updateCartItemQuantity(${index}, 'kg', this.value)">
-                        <div class="qty-unit">kg</div>
-                    </div>
-                </div>
-                <div class="cart-item-subtotal">
-                    ${BashanPOS.formatCurrency(item.qtyKg * item.pricePerKg)}
+                <div class="qty-input-group">
+                    <div class="qty-label">Kilograms</div>
+                    <input type="number" 
+                           class="qty-input" 
+                           value="${qtyKg.toFixed(2)}" 
+                           step="0.01" 
+                           min="0"
+                           onchange="posSystem.updateCartItemQuantity(${index}, 'kg', this.value)">
+                    <div class="qty-unit">kg</div>
                 </div>
             </div>
-        `).join('');
-    }
+            <div class="cart-item-subtotal">
+                ${BashanPOS.formatCurrency(subtotal)}
+            </div>
+        </div>
+        `;
+    }).join('');
+}
     
     updateCartSummary() {
         const subtotal = this.cart.reduce((sum, item) => sum + (item.qtyKg * item.pricePerKg), 0);
