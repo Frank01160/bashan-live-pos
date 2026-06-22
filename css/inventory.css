@@ -566,7 +566,56 @@
     background: var(--green-dark);
     color: var(--text-primary);
 }
+/* Stock section styling */
+.stock-section {
+    background: rgba(13, 40, 24, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 15px;
+    margin: 15px 0;
+}
 
+.stock-section h4 {
+    color: var(--text-primary);
+    font-size: 14px;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--card-border);
+}
+
+/* UOM-specific input rows */
+#stockKgInputs,
+#stockBagsInputs,
+#stockVolumeInputs,
+#stockCountInputs,
+#stockCartonInputs,
+#stockLengthInputs {
+    margin-bottom: 10px;
+}
+
+/* Total display */
+#stockTotalDisplay {
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 10px 15px;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+#stockTotalDisplay strong {
+    color: var(--green-accent);
+    font-size: 16px;
+}
+
+/* Disabled input styling */
+.adj-input:disabled {
+    background: rgba(13, 40, 24, 0.3);
+    cursor: not-allowed;
+}
 .calculated-total {
     background: rgba(76, 175, 80, 0.1);
     border: 1px solid rgba(76, 175, 80, 0.2);
