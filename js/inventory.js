@@ -356,70 +356,217 @@ class InventorySystem {
             });
         });
     }
-    
     createTableRow(product) {
-        const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const threshold = product.lowStockThreshold || this.settings?.lowStockThreshold || 100;
-        const stock = product.currentStockKg || 0;
+    const uom = product.uom || 'kg';
+    const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+    const threshold = product.lowStockThreshold || this.settings?.lowStockThreshold || 100;
+    
+    let stock = 0;
+    let stockDisplay = '';
+    let priceDisplay = '';
+    let status = '';
+    let statusClass = '';
+    let rowClass = '';
+    let stockBarClass = '';
+    let maxForBar = 100;
+    
+    switch(uom) {
+        case 'kg':
+            stock = product.currentStockKg || 0;
+            maxForBar = nguniaSize * 10;
+            stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
+            break;
+            
+        case 'bags':
+            stock = product.currentStockCount || 0;
+            maxForBar = 50;
+            stockDisplay = `${stock} bags (${product.kgPerBag || 50}kg each)`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerBag || 0)}/bag`;
+            break;
+            
+        case 'litres':
+            stock = product.currentStockLitres || 0;
+            maxForBar = 100;
+            stockDisplay = `${stock.toFixed(2)} litres`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerLitre || 0)}/L`;
+            break;
+            
+        case 'ml':
+            stock = product.currentStockMl || 0;
+            maxForBar = 5000;
+            stockDisplay = `${stock.toFixed(0)} mL`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePer100ml || 0)}/100mL`;
+            break;
+            
+        case 'pieces':
+            stock = product.currentStockCount || 0;
+            maxForBar = 100;
+            stockDisplay = `${stock} pieces`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerPiece || 0)}/pc`;
+            break;
+            
+        case 'grams':
+            stock = product.currentStockGrams || 0;
+            maxForBar = 5000;
+            stockDisplay = `${stock}g`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerGram || 0)}/g`;
+            break;
+            
+        case 'sachets':
+            stock = product.currentStockCount || 0;
+            maxForBar = 100;
+            stockDisplay = `${stock} sachets`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerSachet || 0)}/sachet`;
+            break;
+            
+        case 'cartons':
+            stock = product.currentStockCount || 0;
+            maxForBar = 20;
+            const itemsPerCarton = product.itemsPerCarton || 12;
+            stockDisplay = `${stock} cartons (${stock * itemsPerCarton} pcs)`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerCarton || 0)}/carton`;
+            break;
+            
+        case 'rolls':
+            stock = product.currentStockCount || 0;
+            maxForBar = 30;
+            stockDisplay = `${stock} rolls`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerRoll || 0)}/roll`;
+            break;
+            
+        case 'metres':
+            stock = product.currentStockMetres || 0;
+            maxForBar = 200;
+            stockDisplay = `${stock.toFixed(2)} metres`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerMetre || 0)}/m`;
+            break;
+            
+        default:
+            stock = product.currentStockKg || 0;
+            maxForBar = nguniaSize * 10;
+            stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
+    }
+    
+    // Determine status
+    if (stock <= 0) {
+        status = 'Out of Stock';
+        statusClass = 'out-of-stock';
+        rowClass = 'out-of-stock-row';
+        stockBarClass = 'low';
+    } else if (stock <= threshold) {
+        status = 'Low Stock';
+        statusClass = 'low-stock';
+        rowClass = 'low-stock-row';
+        stockBarClass = 'medium';
+    } else {
+        status = 'In Stock';
+        statusClass = 'in-stock';
+        rowClass = '';
+        stockBarClass = 'good';
+    }
+    
+    const stockPercentage = Math.min(100, Math.max(0, (stock / maxForBar) * 100));
+    const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'Uncategorized';
+    const uomBadge = `<span class="uom-badge-inline">${uom}</span>`;
+    
+    return `
+        <tr class="${rowClass}" data-product-id="${product.id}">
+            <td class="product-name-cell">${product.name || 'Unnamed'} ${uomBadge}</td>
+            <td>${categoryName}</td>
+            <td>${uom !== 'kg' ? '-' : (nguniaSize + ' kg')}</td>
+            <td class="stock-display">
+                ${stockDisplay}
+                <div class="stock-level-bar">
+                    <div class="stock-level-fill ${stockBarClass}" style="width:${stockPercentage}%"></div>
+                </div>
+            </td>
+            <td>${priceDisplay}</td>
+            <td><span class="status-badge ${statusClass}">${status}</span></td>
+            <td>
+                <div class="action-btns">
+                    <button class="action-btn adjust">📦 Adjust</button>
+                    <button class="action-btn edit">✏️ Edit</button>
+                    <button class="action-btn archive">🗑️ Archive</button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+    loadStats() {
+    const threshold = this.settings?.lowStockThreshold || 100;
+    
+    const totalProducts = this.products.length;
+    
+    // Count low stock and out of stock based on UOM
+    let lowStock = 0;
+    let outOfStock = 0;
+    let totalValue = 0;
+    
+    this.products.forEach(p => {
+        const uom = p.uom || 'kg';
+        let stock = 0;
+        let value = 0;
+        let productThreshold = p.lowStockThreshold || threshold;
         
-        let status, statusClass, rowClass, stockBarClass;
-        if (stock <= 0) {
-            status = 'Out of Stock';
-            statusClass = 'out-of-stock';
-            rowClass = 'out-of-stock-row';
-            stockBarClass = 'low';
-        } else if (stock <= threshold) {
-            status = 'Low Stock';
-            statusClass = 'low-stock';
-            rowClass = 'low-stock-row';
-            stockBarClass = 'medium';
-        } else {
-            status = 'In Stock';
-            statusClass = 'in-stock';
-            rowClass = '';
-            stockBarClass = 'good';
+        switch(uom) {
+            case 'kg':
+                stock = p.currentStockKg || 0;
+                value = stock * (p.pricePerKg || 0);
+                break;
+            case 'bags':
+                stock = p.currentStockCount || 0;
+                value = stock * (p.pricePerBag || 0);
+                break;
+            case 'litres':
+                stock = p.currentStockLitres || 0;
+                value = stock * (p.pricePerLitre || 0);
+                break;
+            case 'ml':
+                stock = p.currentStockMl || 0;
+                value = stock * (p.pricePer100ml || 0);
+                break;
+            case 'pieces':
+                stock = p.currentStockCount || 0;
+                value = stock * (p.pricePerPiece || 0);
+                break;
+            case 'grams':
+                stock = p.currentStockGrams || 0;
+                value = stock * (p.pricePerGram || 0);
+                break;
+            case 'sachets':
+                stock = p.currentStockCount || 0;
+                value = stock * (p.pricePerSachet || 0);
+                break;
+            case 'cartons':
+                stock = p.currentStockCount || 0;
+                value = stock * (p.pricePerCarton || 0);
+                break;
+            case 'rolls':
+                stock = p.currentStockCount || 0;
+                value = stock * (p.pricePerRoll || 0);
+                break;
+            case 'metres':
+                stock = p.currentStockMetres || 0;
+                value = stock * (p.pricePerMetre || 0);
+                break;
+            default:
+                stock = p.currentStockKg || 0;
+                value = stock * (p.pricePerKg || 0);
         }
         
-        const stockPercentage = Math.min(100, Math.max(0, (stock / (nguniaSize * 10)) * 100));
-        const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'Uncategorized';
+        if (stock <= 0) outOfStock++;
+        else if (stock <= productThreshold) lowStock++;
         
-        return `
-            <tr class="${rowClass}" data-product-id="${product.id}">
-                <td class="product-name-cell">${product.name || 'Unnamed'}</td>
-                <td>${categoryName}</td>
-                <td>${nguniaSize} kg</td>
-                <td class="stock-display">
-                    ${BashanPOS.formatStock(stock, nguniaSize)}
-                    <div class="stock-level-bar">
-                        <div class="stock-level-fill ${stockBarClass}" style="width:${stockPercentage}%"></div>
-                    </div>
-                </td>
-                <td>${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg</td>
-                <td><span class="status-badge ${statusClass}">${status}</span></td>
-                <td>
-                    <div class="action-btns">
-                        <button class="action-btn adjust">📦 Adjust</button>
-                        <button class="action-btn edit">✏️ Edit</button>
-                        <button class="action-btn archive">🗑️ Archive</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }
+        totalValue += value;
+    });
     
-    loadStats() {
-        const threshold = this.settings?.lowStockThreshold || 100;
-        
-        const totalProducts = this.products.length;
-        const lowStock = this.products.filter(p => (p.currentStockKg || 0) <= threshold && (p.currentStockKg || 0) > 0).length;
-        const outOfStock = this.products.filter(p => (p.currentStockKg || 0) <= 0).length;
-        const totalValue = this.products.reduce((sum, p) => sum + ((p.currentStockKg || 0) * (p.pricePerKg || 0)), 0);
-        
-        document.getElementById('totalProducts').textContent = totalProducts;
-        document.getElementById('lowStockCount').textContent = lowStock;
-        document.getElementById('outOfStockCount').textContent = outOfStock;
-        document.getElementById('totalValue').textContent = BashanPOS.formatCurrency(totalValue);
-    }
+    document.getElementById('totalProducts').textContent = totalProducts;
+    document.getElementById('lowStockCount').textContent = lowStock;
+    document.getElementById('outOfStockCount').textContent = outOfStock;
+    document.getElementById('totalValue').textContent = BashanPOS.formatCurrency(totalValue);
+}
     
     // ============ STOCK ADJUSTMENT ============
     openAdjustModal(productId) {
