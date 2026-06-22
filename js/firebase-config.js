@@ -234,38 +234,195 @@ function getProductsRealtime(callback) {
             callback([]);
         });
 }
-
-function updateStock(productId, newStockKg, reason, notes, userName, userId) {
+function updateStock(productId, newStockValue, reason, notes, userName, userId, uom) {
     return productsRef.doc(productId).get()
         .then(productDoc => {
             if (!productDoc.exists) {
                 return { success: false, message: 'Product not found' };
             }
             
-            const oldStock = productDoc.data().currentStockKg || 0;
-            const difference = newStockKg - oldStock;
+            const productData = productDoc.data();
+            const productUom = uom || productData.uom || 'kg';
+            let oldStock = 0;
+            let newStock = newStockValue;
+            let updateData = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+            let quantityChanged = 0;
+            let quantityUnit = '';
+            let logData = {};
+            
+            // Determine which stock field to update based on UOM
+            switch(productUom) {
+                case 'kg':
+                    oldStock = productData.currentStockKg || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockKg = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'kg';
+                    logData = {
+                        quantityKg: Math.abs(quantityChanged),
+                        quantityNgunia: Math.abs(quantityChanged) / (productData.nguniaKg || DEFAULT_NGUNIA_KG),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'bags':
+                    oldStock = productData.currentStockCount || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockCount = newStock;
+                    // Also update kg equivalent
+                    const kgPerBag = productData.kgPerBag || 50;
+                    updateData.currentStockKg = newStock * kgPerBag;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'bags';
+                    logData = {
+                        quantityBags: Math.abs(quantityChanged),
+                        quantityKg: Math.abs(quantityChanged) * kgPerBag,
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'litres':
+                    oldStock = productData.currentStockLitres || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockLitres = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'litres';
+                    logData = {
+                        quantityLitres: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'ml':
+                    oldStock = productData.currentStockMl || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockMl = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'mL';
+                    logData = {
+                        quantityMl: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'pieces':
+                    oldStock = productData.currentStockCount || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockCount = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'pieces';
+                    logData = {
+                        quantityPieces: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'grams':
+                    oldStock = productData.currentStockGrams || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockGrams = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'grams';
+                    logData = {
+                        quantityGrams: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'sachets':
+                    oldStock = productData.currentStockCount || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockCount = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'sachets';
+                    logData = {
+                        quantitySachets: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'cartons':
+                    oldStock = productData.currentStockCount || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockCount = newStock;
+                    // Also update pieces equivalent
+                    const itemsPerCarton = productData.itemsPerCarton || 12;
+                    updateData.currentStockPieces = newStock * itemsPerCarton;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'cartons';
+                    logData = {
+                        quantityCartons: Math.abs(quantityChanged),
+                        quantityPieces: Math.abs(quantityChanged) * itemsPerCarton,
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'rolls':
+                    oldStock = productData.currentStockCount || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockCount = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'rolls';
+                    logData = {
+                        quantityRolls: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                case 'metres':
+                    oldStock = productData.currentStockMetres || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockMetres = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'metres';
+                    logData = {
+                        quantityMetres: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+                    break;
+                    
+                default:
+                    // Fallback to kg
+                    oldStock = productData.currentStockKg || 0;
+                    newStock = newStockValue;
+                    updateData.currentStockKg = newStock;
+                    quantityChanged = newStock - oldStock;
+                    quantityUnit = 'kg';
+                    logData = {
+                        quantityKg: Math.abs(quantityChanged),
+                        beforeStock: oldStock,
+                        afterStock: newStock
+                    };
+            }
             
             // Update product stock
-            return productsRef.doc(productId).update({
-                currentStockKg: newStockKg,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }).then(() => {
+            return productsRef.doc(productId).update(updateData).then(() => {
                 // Log the stock movement
                 return stockLogRef.add({
                     productId: productId,
-                    productName: productDoc.data().name,
-                    type: difference > 0 ? 'add' : 'remove',
-                    quantityKg: Math.abs(difference),
-                    quantityNgunia: Math.abs(difference) / (productDoc.data().nguniaKg || DEFAULT_NGUNIA_KG),
+                    productName: productData.name,
+                    uom: productUom,
+                    type: quantityChanged > 0 ? 'add' : 'remove',
                     reason: reason,
                     notes: notes || '',
                     doneBy: userId,
                     doneByName: userName,
-                    beforeStock: oldStock,
-                    afterStock: newStockKg,
+                    ...logData,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 }).then(() => {
-                    logAudit('STOCK_UPDATE', `${productDoc.data().name}: ${oldStock}kg → ${newStockKg}kg (${reason})`);
+                    logAudit('STOCK_UPDATE', 
+                        `${productData.name} (${productUom}): ${oldStock} → ${newStock} ${quantityUnit} (${reason})`
+                    );
                     return { success: true };
                 });
             });
@@ -275,7 +432,6 @@ function updateStock(productId, newStockKg, reason, notes, userName, userId) {
             return { success: false, message: error.message };
         });
 }
-
 // ============================================
 // SALE FUNCTIONS
 // ============================================function completeSale(saleData) {
