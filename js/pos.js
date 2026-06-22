@@ -460,8 +460,14 @@ class BashanPOSSystem {
             const si = { productId: item.productId, name: item.name, uom: item.uom || 'kg', qty: item.qty, sellMode: item.sellMode || 'unit', price: item.subtotal / (item.qty || 1), subtotal: item.subtotal };
             switch(item.uom) {
                 case 'kg': si.qtyNgunia = item.qty; si.qtyKg = item.qtyKg; si.pricePerKg = item.pricePerKg; si.nguniaSize = item.nguniaSize; break;
-                case 'bags': si.pricePerBag = item.pricePerBag; si.kgPerBag = item.kgPerBag; if (item.sellMode === 'kg') { si.qtyKg = item.qty; si.pricePerKg = item.pricePerKg; } break;
-                case 'litres': si.pricePerLitre = item.pricePerLitre; break;
+               case 'bags': 
+    si.pricePerBag = item.pricePerBag; 
+    si.kgPerBag = item.kgPerBag; 
+    if (item.sellMode === 'kg') { 
+        si.qtyKg = item.qty; 
+        si.pricePerKg = item.pricePerKg; 
+    } 
+    break;  case 'litres': si.pricePerLitre = item.pricePerLitre; break;
                 case 'ml': si.pricePer100ml = item.pricePer100ml; break;
                 case 'pieces': si.pricePerPiece = item.pricePerPiece; break;
                 case 'grams': si.pricePerGram = item.pricePerGram; break;
