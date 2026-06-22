@@ -850,114 +850,165 @@ updateCartItemQuantity(index, value) {
         }
     }
     
-    // ============ COMPLETE SALE ============
-    async completeSale() {
-        if (this.cart.length === 0) {
-            BashanPOS.showNotification('Basket is empty!', 'warning');
-            return;
-        }
-        
-        const subtotal = this.cart.reduce((sum, item) => sum + (item.qtyKg * item.pricePerKg), 0);
-        const discount = parseFloat(document.getElementById('discountInput').value) || 0;
-        const total = Math.max(0, subtotal - discount);
-        
-        if (total <= 0) {
-            BashanPOS.showNotification('Total must be greater than 0', 'warning');
-            return;
-        }
-        
-        // Check discount limit
-        if (this.settings?.maxDiscount && discount > this.settings.maxDiscount) {
-            BashanPOS.showNotification(`Maximum discount allowed is ${BashanPOS.formatCurrency(this.settings.maxDiscount)}`, 'warning');
-            return;
-        }
-        
-        // Verify stock availability
-        for (const item of this.cart) {
-            const product = this.products.find(p => p.id === item.productId);
-            if (!product || product.currentStockKg < item.qtyKg) {
-                BashanPOS.showNotification(`Insufficient stock for ${item.name}`, 'error');
-                return;
-            }
-        }
-        
-        // Confirm sale
-        const confirmed = await BashanPOS.showConfirm(
-            `Complete sale of ${BashanPOS.formatCurrency(total)}?\n\n` +
-            `Items: ${this.cart.length}\n` +
-            `Discount: ${BashanPOS.formatCurrency(discount)}`
-        );
-        
-        if (!confirmed) return;
-        
-        // Process sale
-        const paymentMethod = document.getElementById('paymentMethod').value;
-        const customerName = document.getElementById('customerName').value.trim();
-        
-        const saleData = {
-            items: this.cart.map(item => ({
-                productId: item.productId,
-                name: item.name,
-                qtyNgunia: item.qtyNgunia,
-                qtyKg: item.qtyKg,
-                pricePerKg: item.pricePerKg,
-                subtotal: item.qtyKg * item.pricePerKg
-            })),
-            subtotal: subtotal,
-            discountKsh: discount,
-            total: total,
-            paymentMethod: paymentMethod,
-            customerName: customerName,
-            sellerId: this.user.id,
-            sellerName: this.user.name
-        };
-        
-        // Show loading
-        const completeBtn = document.getElementById('completeSaleBtn');
-        completeBtn.disabled = true;
-        completeBtn.innerHTML = '<div class="loading-spinner"></div>';
-        
-        const result = await BashanPOS.completeSale(saleData);
-        
-        if (result.success) {
-            this.lastSale = {
-                ...saleData,
-                receiptNumber: result.receiptNumber,
-                saleId: result.saleId,
-                timestamp: new Date()
-            };
-            
-            // Show success modal
-            this.showSuccessModal();
-            
-            // Clear cart
-            this.cart = [];
-            this.renderCart();
-            this.updateCartSummary();
-            this.saveCart();
-            document.getElementById('discountInput').value = '0';
-            document.getElementById('customerName').value = '';
-            
-            // Refresh today's stats
-            this.loadTodaySales();
-            
-            // Play success sound
-            this.playSuccessSound();
-            
-            BashanPOS.showNotification(`Sale complete! Receipt: ${result.receiptNumber}`, 'success');
-        } else {
-            BashanPOS.showNotification('Sale failed: ' + result.message, 'error');
-        }
-        
-        completeBtn.disabled = false;
-        completeBtn.innerHTML = `
-            <span>COMPLETE SALE</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"/>
-            </svg>
-        `;
+    // ============ COMPLETE SALE ============async completeSale() {
+    if (this.cart.length === 0) {
+        BashanPOS.showNotification('Basket is empty!', 'warning');
+        return;
     }
     
+    // Calculate totals
+    const subtotal = this.cart.reduce((sum, item) => sum + (item.subtotal || 0), 0);
+    const discount = parseFloat(document.getElementById('discountInput').value) || 0;
+    const total = Math.max(0, subtotal - discount);
+    
+    if (total <= 0) {
+        BashanPOS.showNotification('Total must be greater than 0', 'warning');
+        return;
+    }
+    
+    // Check discount limit
+    if (this.settings?.maxDiscount && discount > this.settings.maxDiscount) {
+        BashanPOS.showNotification(`Maximum discount allowed is ${BashanPOS.formatCurrency(this.settings.maxDiscount)}`, 'warning');
+        return;
+    }
+    
+    // Verify stock availability for all items
+    for (const item of this.cart) {
+        const product = this.products.find(p => p.id === item.productId);
+        if (!product) {
+            BashanPOS.showNotification(`Product not found: ${item.name}`, 'error');
+            return;
+        }
+        
+        const currentStock = this.getProductStock(product);
+        if (item.qty > currentStock) {
+            BashanPOS.showNotification(`Insufficient stock for ${item.name}. Only ${currentStock} available.`, 'error');
+            return;
+        }
+    }
+    
+    // Confirm sale
+    const confirmed = await BashanPOS.showConfirm(
+        `Complete sale of ${BashanPOS.formatCurrency(total)}?\n\n` +
+        `Items: ${this.cart.length}\n` +
+        `Discount: ${BashanPOS.formatCurrency(discount)}`
+    );
+    
+    if (!confirmed) return;
+    
+    // Process sale
+    const paymentMethod = document.getElementById('paymentMethod').value;
+    const customerName = document.getElementById('customerName').value.trim();
+    
+    // Prepare sale items with UOM info
+    const saleItems = this.cart.map(item => {
+        const saleItem = {
+            productId: item.productId,
+            name: item.name,
+            uom: item.uom || 'kg',
+            qty: item.qty,
+            price: item.subtotal / (item.qty || 1),
+            subtotal: item.subtotal
+        };
+        
+        // Add UOM-specific details
+        switch(item.uom) {
+            case 'kg':
+                saleItem.qtyNgunia = item.qty;
+                saleItem.qtyKg = item.qtyKg;
+                saleItem.pricePerKg = item.pricePerKg;
+                saleItem.nguniaSize = item.nguniaSize;
+                break;
+            case 'bags':
+                saleItem.pricePerBag = item.pricePerBag;
+                saleItem.kgPerBag = item.kgPerBag;
+                break;
+            case 'litres':
+                saleItem.pricePerLitre = item.pricePerLitre;
+                break;
+            case 'ml':
+                saleItem.pricePer100ml = item.pricePer100ml;
+                break;
+            case 'pieces':
+                saleItem.pricePerPiece = item.pricePerPiece;
+                break;
+            case 'grams':
+                saleItem.pricePerGram = item.pricePerGram;
+                break;
+            case 'sachets':
+                saleItem.pricePerSachet = item.pricePerSachet;
+                break;
+            case 'cartons':
+                saleItem.pricePerCarton = item.pricePerCarton;
+                saleItem.itemsPerCarton = item.itemsPerCarton;
+                break;
+            case 'rolls':
+                saleItem.pricePerRoll = item.pricePerRoll;
+                break;
+            case 'metres':
+                saleItem.pricePerMetre = item.pricePerMetre;
+                break;
+        }
+        
+        return saleItem;
+    });
+    
+    const saleData = {
+        items: saleItems,
+        subtotal: subtotal,
+        discountKsh: discount,
+        total: total,
+        paymentMethod: paymentMethod,
+        customerName: customerName,
+        sellerId: this.user.id,
+        sellerName: this.user.name
+    };
+    
+    // Show loading
+    const completeBtn = document.getElementById('completeSaleBtn');
+    completeBtn.disabled = true;
+    completeBtn.innerHTML = '<div class="loading-spinner"></div>';
+    
+    const result = await BashanPOS.completeSale(saleData);
+    
+    if (result.success) {
+        this.lastSale = {
+            ...saleData,
+            receiptNumber: result.receiptNumber,
+            saleId: result.saleId,
+            timestamp: new Date()
+        };
+        
+        // Show success modal
+        this.showSuccessModal();
+        
+        // Clear cart
+        this.cart = [];
+        this.renderCart();
+        this.updateCartSummary();
+        this.saveCart();
+        document.getElementById('discountInput').value = '0';
+        document.getElementById('customerName').value = '';
+        
+        // Refresh today's stats
+        this.loadTodaySales();
+        
+        // Play success sound
+        this.playSuccessSound();
+        
+        BashanPOS.showNotification(`Sale complete! Receipt: ${result.receiptNumber}`, 'success');
+    } else {
+        BashanPOS.showNotification('Sale failed: ' + result.message, 'error');
+    }
+    
+    completeBtn.disabled = false;
+    completeBtn.innerHTML = `
+        <span>COMPLETE SALE</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>
+    `;
+}
     showSuccessModal() {
         const sale = this.lastSale;
         if (!sale) return;
