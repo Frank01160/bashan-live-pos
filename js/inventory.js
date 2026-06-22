@@ -568,38 +568,87 @@ class InventorySystem {
     document.getElementById('totalValue').textContent = BashanPOS.formatCurrency(totalValue);
 }
     
-    // ============ STOCK ADJUSTMENT ============
-    openAdjustModal(productId) {
-        const product = this.products.find(p => p.id === productId);
-        if (!product) return;
-        
-        this.currentAdjustProduct = product;
-        this.adjustmentType = 'add';
-        
-        document.getElementById('adjustModalTitle').textContent = `Adjust Stock - ${product.name}`;
-        document.getElementById('adjustProductInfo').innerHTML = `
-            <div class="product-name-lg">${product.name}</div>
-            <div class="product-meta">
-                <span>Current: ${BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000)}</span>
-                <span>Price: ${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg</span>
-            </div>
-        `;
-        document.getElementById('currentStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
-        
-        // Reset form
-        document.getElementById('adjNgunias').value = '0';
-        document.getElementById('adjKg').value = '0';
-        document.getElementById('adjReason').value = '';
-        document.getElementById('adjOtherReason').value = '';
-        document.getElementById('adjNotes').value = '';
-        document.getElementById('adjTotalDisplay').textContent = '0 kg (0 ngunias)';
-        document.getElementById('newStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
-        document.getElementById('otherReasonGroup').style.display = 'none';
-        
-        this.setAdjustmentType('add');
-        
-        document.getElementById('adjustStockModal').classList.add('active');
+    // ============ STOCK ADJUSTMENT ============openAdjustModal(productId) {
+    const product = this.products.find(p => p.id === productId);
+    if (!product) return;
+    
+    this.currentAdjustProduct = product;
+    this.adjustmentType = 'add';
+    
+    const uom = product.uom || 'kg';
+    let stockDisplay = '';
+    let priceDisplay = '';
+    
+    switch(uom) {
+        case 'kg':
+            stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
+            break;
+        case 'bags':
+            stockDisplay = `${product.currentStockCount || 0} bags`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerBag || 0)}/bag`;
+            break;
+        case 'litres':
+            stockDisplay = `${(product.currentStockLitres || 0).toFixed(2)} L`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerLitre || 0)}/L`;
+            break;
+        case 'ml':
+            stockDisplay = `${(product.currentStockMl || 0).toFixed(0)} mL`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePer100ml || 0)}/100mL`;
+            break;
+        case 'pieces':
+            stockDisplay = `${product.currentStockCount || 0} pieces`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerPiece || 0)}/pc`;
+            break;
+        case 'grams':
+            stockDisplay = `${product.currentStockGrams || 0}g`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerGram || 0)}/g`;
+            break;
+        case 'sachets':
+            stockDisplay = `${product.currentStockCount || 0} sachets`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerSachet || 0)}/sachet`;
+            break;
+        case 'cartons':
+            stockDisplay = `${product.currentStockCount || 0} cartons`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerCarton || 0)}/carton`;
+            break;
+        case 'rolls':
+            stockDisplay = `${product.currentStockCount || 0} rolls`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerRoll || 0)}/roll`;
+            break;
+        case 'metres':
+            stockDisplay = `${(product.currentStockMetres || 0).toFixed(2)} m`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerMetre || 0)}/m`;
+            break;
+        default:
+            stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, 1000);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
     }
+    
+    document.getElementById('adjustModalTitle').textContent = `Adjust Stock - ${product.name}`;
+    document.getElementById('adjustProductInfo').innerHTML = `
+        <div class="product-name-lg">${product.name} <span class="uom-badge-inline">${uom}</span></div>
+        <div class="product-meta">
+            <span>Current: ${stockDisplay}</span>
+            <span>Price: ${priceDisplay}</span>
+        </div>
+    `;
+    document.getElementById('currentStockDisplay').textContent = stockDisplay;
+    
+    // Reset form
+    document.getElementById('adjNgunias').value = '0';
+    document.getElementById('adjKg').value = '0';
+    document.getElementById('adjReason').value = '';
+    document.getElementById('adjOtherReason').value = '';
+    document.getElementById('adjNotes').value = '';
+    document.getElementById('adjTotalDisplay').textContent = '0';
+    document.getElementById('newStockDisplay').textContent = stockDisplay;
+    document.getElementById('otherReasonGroup').style.display = 'none';
+    
+    this.setAdjustmentType('add');
+    
+    document.getElementById('adjustStockModal').classList.add('active');
+}
     
     setAdjustmentType(type) {
         this.adjustmentType = type;
@@ -630,69 +679,96 @@ class InventorySystem {
         document.getElementById('newStockDisplay').textContent = 
             BashanPOS.formatStock(Math.max(0, newStock), nguniaSize);
     }
-    
     async confirmAdjustment() {
-        if (!this.currentAdjustProduct) return;
-        
-        const nguniaSize = this.currentAdjustProduct.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const ngunias = parseFloat(document.getElementById('adjNgunias').value) || 0;
-        const kg = parseFloat(document.getElementById('adjKg').value) || 0;
-        const totalKg = (ngunias * nguniaSize) + kg;
-        
-        if (totalKg <= 0) {
-            BashanPOS.showNotification('Please enter a quantity', 'warning');
-            return;
-        }
-        
-        if (this.adjustmentType === 'remove' && totalKg > (this.currentAdjustProduct.currentStockKg || 0)) {
-            BashanPOS.showNotification('Cannot remove more than current stock', 'error');
-            return;
-        }
-        
-        const reason = document.getElementById('adjReason').value;
-        const otherReason = document.getElementById('adjOtherReason').value;
-        
-        if (!reason) {
-            BashanPOS.showNotification('Please select a reason', 'warning');
-            return;
-        }
-        
-        const finalReason = reason === 'Other' ? otherReason : reason;
-        if (reason === 'Other' && !otherReason) {
-            BashanPOS.showNotification('Please specify the reason', 'warning');
-            return;
-        }
-        
-        const notes = document.getElementById('adjNotes').value;
-        const newStock = this.adjustmentType === 'add' 
-            ? (this.currentAdjustProduct.currentStockKg || 0) + totalKg
-            : (this.currentAdjustProduct.currentStockKg || 0) - totalKg;
-        
-        const confirmed = await BashanPOS.showConfirm(
-            `${this.adjustmentType === 'add' ? 'Add' : 'Remove'} ${totalKg.toFixed(2)} kg ` +
-            `(${(totalKg / nguniaSize).toFixed(3)} ngunias) ${this.adjustmentType === 'add' ? 'to' : 'from'} ` +
-            `${this.currentAdjustProduct.name}?\n\nReason: ${finalReason}`
-        );
-        
-        if (!confirmed) return;
-        
-        const result = await BashanPOS.updateStock(
-            this.currentAdjustProduct.id,
-            newStock,
-            finalReason,
-            notes,
-            this.user.name,
-            this.user.id
-        );
-        
-        if (result.success) {
-            BashanPOS.showNotification('Stock adjusted successfully!', 'success');
-            this.closeAdjustModal();
-            await this.loadProducts();
-        } else {
-            BashanPOS.showNotification('Failed to adjust stock: ' + result.message, 'error');
-        }
+    if (!this.currentAdjustProduct) return;
+    
+    const product = this.currentAdjustProduct;
+    const uom = product.uom || 'kg';
+    const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+    const ngunias = parseFloat(document.getElementById('adjNgunias').value) || 0;
+    const kg = parseFloat(document.getElementById('adjKg').value) || 0;
+    
+    let totalChange = 0;
+    let currentStock = 0;
+    let unitLabel = '';
+    
+    // Calculate based on UOM
+    switch(uom) {
+        case 'kg':
+            totalChange = (ngunias * nguniaSize) + kg;
+            currentStock = product.currentStockKg || 0;
+            unitLabel = 'kg';
+            break;
+        case 'bags':
+            totalChange = ngunias + kg; // ngunias field used as bags, kg as extra
+            currentStock = product.currentStockCount || 0;
+            unitLabel = 'bags';
+            break;
+        default:
+            // For non-kg UOMs, use the ngunias field as the main quantity
+            totalChange = ngunias + kg;
+            currentStock = this.getCurrentStockForUOM(product, uom);
+            unitLabel = uom;
     }
+    
+    if (totalChange <= 0) {
+        BashanPOS.showNotification('Please enter a quantity', 'warning');
+        return;
+    }
+    
+    if (this.adjustmentType === 'remove' && totalChange > currentStock) {
+        BashanPOS.showNotification(`Cannot remove more than current stock (${currentStock} ${unitLabel})`, 'error');
+        return;
+    }
+    
+    const reason = document.getElementById('adjReason').value;
+    const otherReason = document.getElementById('adjOtherReason').value;
+    
+    if (!reason) {
+        BashanPOS.showNotification('Please select a reason', 'warning');
+        return;
+    }
+    
+    const finalReason = reason === 'Other' ? otherReason : reason;
+    if (reason === 'Other' && !otherReason) {
+        BashanPOS.showNotification('Please specify the reason', 'warning');
+        return;
+    }
+    
+    const notes = document.getElementById('adjNotes').value;
+    const newStock = this.adjustmentType === 'add' 
+        ? currentStock + totalChange
+        : currentStock - totalChange;
+    
+    const confirmed = await BashanPOS.showConfirm(
+        `${this.adjustmentType === 'add' ? 'Add' : 'Remove'} ${totalChange} ${unitLabel} ` +
+        `${this.adjustmentType === 'add' ? 'to' : 'from'} ${product.name}?\n\n` +
+        `Current: ${currentStock} ${unitLabel}\n` +
+        `New: ${newStock} ${unitLabel}\n\n` +
+        `Reason: ${finalReason}`
+    );
+    
+    if (!confirmed) return;
+    
+    // Call updateStock with UOM
+    const result = await BashanPOS.updateStock(
+        product.id,
+        newStock,
+        finalReason,
+        notes,
+        this.user.name,
+        this.user.id,
+        uom  // Pass UOM
+    );
+    
+    if (result.success) {
+        BashanPOS.showNotification('Stock adjusted successfully!', 'success');
+        this.closeAdjustModal();
+        await this.loadProducts();
+    } else {
+        BashanPOS.showNotification('Failed to adjust stock: ' + result.message, 'error');
+    }
+}
     
     closeAdjustModal() {
         document.getElementById('adjustStockModal').classList.remove('active');
