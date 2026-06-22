@@ -278,8 +278,7 @@ function updateStock(productId, newStockKg, reason, notes, userName, userId) {
 
 // ============================================
 // SALE FUNCTIONS
-// ============================================
-function completeSale(saleData) {
+// ============================================function completeSale(saleData) {
     const batch = db.batch();
     const saleRef = salesRef.doc();
     
@@ -305,17 +304,88 @@ function completeSale(saleData) {
     
     batch.set(saleRef, sale);
     
-    // Deduct stock for each item - FIXED: use qtyKg not quantityKg
+    // Deduct stock for each item based on UOM
     saleData.items.forEach(item => {
         const productRef = productsRef.doc(item.productId);
-        batch.update(productRef, {
-            currentStockKg: firebase.firestore.FieldValue.increment(-item.qtyKg)
-        });
+        const uom = item.uom || 'kg';
+        const qty = item.qty || 0;
+        
+        switch(uom) {
+            case 'kg':
+                // Deduct kg from stock
+                batch.update(productRef, {
+                    currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty * 1000))
+                });
+                break;
+                
+            case 'bags':
+                // Deduct bag count
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty),
+                    currentStockKg: firebase.firestore.FieldValue.increment(-(qty * (item.kgPerBag || 50)))
+                });
+                break;
+                
+            case 'litres':
+                batch.update(productRef, {
+                    currentStockLitres: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'ml':
+                batch.update(productRef, {
+                    currentStockMl: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'pieces':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'grams':
+                batch.update(productRef, {
+                    currentStockGrams: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'sachets':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'cartons':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty),
+                    currentStockPieces: firebase.firestore.FieldValue.increment(-(qty * (item.itemsPerCarton || 12)))
+                });
+                break;
+                
+            case 'rolls':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'metres':
+                batch.update(productRef, {
+                    currentStockMetres: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            default:
+                // Fallback to kg
+                batch.update(productRef, {
+                    currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty))
+                });
+        }
     });
     
     return batch.commit()
         .then(() => {
-            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total}`);
+            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total} (${saleData.items.length} items)`);
             return { success: true, receiptNumber, saleId: saleRef.id };
         })
         .catch(error => {
