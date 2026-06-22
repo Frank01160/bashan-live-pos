@@ -334,88 +334,245 @@ setupUI() {
                 if (product) this.addToCart(product);
             });
         });
-    }createProductCard(product) {
-    // FIX: Ensure numeric values are valid
-    const nguniaSize = (product.nguniaKg && !isNaN(product.nguniaKg)) ? product.nguniaKg : (this.settings?.nguniaDefault || 1000);
-    const currentStock = (product.currentStockKg && !isNaN(product.currentStockKg)) ? product.currentStockKg : 0;
-    const lowStockThreshold = (product.lowStockThreshold && !isNaN(product.lowStockThreshold)) ? product.lowStockThreshold : 100;
-    const pricePerKg = (product.pricePerKg && !isNaN(product.pricePerKg)) ? product.pricePerKg : 0;
+    }
+    createProductCard(product) {
+    const uom = product.uom || 'kg';
+    const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+    const threshold = product.lowStockThreshold || this.settings?.lowStockThreshold || 100;
     
-    const isLowStock = currentStock <= lowStockThreshold;
-    const isSoldOut = currentStock <= 0;
-    const stockPercentage = Math.min(100, Math.max(0, (currentStock / (nguniaSize * 5)) * 100));
+    let currentStock = 0;
+    let stockDisplay = '';
+    let priceDisplay = '';
+    let isSoldOut = false;
+    let isLowStock = false;
+    let stockPercentage = 0;
+    let maxStock = 0;
+    
+    switch(uom) {
+        case 'kg':
+            currentStock = product.currentStockKg || 0;
+            maxStock = nguniaSize * 5;
+            stockDisplay = BashanPOS.formatStock(currentStock, nguniaSize);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}<small>/kg</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'bags':
+            currentStock = product.currentStockCount || 0;
+            maxStock = 50;
+            stockDisplay = `${currentStock} bags (${(product.kgPerBag || 50)}kg each)`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerBag || 0)}<small>/bag</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'litres':
+            currentStock = product.currentStockLitres || 0;
+            maxStock = 100;
+            stockDisplay = `${currentStock.toFixed(2)} L`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerLitre || 0)}<small>/L</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'ml':
+            currentStock = product.currentStockMl || 0;
+            maxStock = 5000;
+            stockDisplay = `${currentStock.toFixed(0)} mL`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePer100ml || 0)}<small>/100mL</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'pieces':
+            currentStock = product.currentStockCount || 0;
+            maxStock = 100;
+            stockDisplay = `${currentStock} pcs`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerPiece || 0)}<small>/pc</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'grams':
+            currentStock = product.currentStockGrams || 0;
+            maxStock = 5000;
+            stockDisplay = `${currentStock}g`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerGram || 0)}<small>/g</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'sachets':
+            currentStock = product.currentStockCount || 0;
+            maxStock = 100;
+            stockDisplay = `${currentStock} sachets`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerSachet || 0)}<small>/sachet</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'cartons':
+            currentStock = product.currentStockCount || 0;
+            maxStock = 20;
+            const itemsPerCarton = product.itemsPerCarton || 12;
+            stockDisplay = `${currentStock} cartons (${currentStock * itemsPerCarton} pcs)`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerCarton || 0)}<small>/carton</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'rolls':
+            currentStock = product.currentStockCount || 0;
+            maxStock = 30;
+            stockDisplay = `${currentStock} rolls`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerRoll || 0)}<small>/roll</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        case 'metres':
+            currentStock = product.currentStockMetres || 0;
+            maxStock = 200;
+            stockDisplay = `${currentStock.toFixed(2)} m`;
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerMetre || 0)}<small>/m</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+            break;
+            
+        default:
+            currentStock = product.currentStockKg || 0;
+            maxStock = nguniaSize * 5;
+            stockDisplay = BashanPOS.formatStock(currentStock, nguniaSize);
+            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}<small>/kg</small>`;
+            isSoldOut = currentStock <= 0;
+            isLowStock = currentStock <= threshold && currentStock > 0;
+            stockPercentage = Math.min(100, Math.max(0, (currentStock / maxStock) * 100));
+    }
     
     let stockBarClass = 'good';
     if (stockPercentage < 20) stockBarClass = 'low';
     else if (stockPercentage < 50) stockBarClass = 'medium';
     
+    const uomBadge = uom !== 'kg' ? `<span class="uom-badge">${uom}</span>` : '';
+    
     return `
         <div class="product-card ${isSoldOut ? 'sold-out' : ''} ${isLowStock && !isSoldOut ? 'low-stock' : ''}" 
              data-product-id="${product.id}">
             ${isLowStock && !isSoldOut ? '<span class="low-stock-badge">Low</span>' : ''}
+            ${uomBadge}
             <div class="product-name">${product.name}</div>
             <div class="product-category">${product.category || 'Uncategorized'}</div>
-            <div class="product-price">${BashanPOS.formatCurrency(pricePerKg)}<small>/kg</small></div>
-            <div class="product-stock">${BashanPOS.formatStock(currentStock, nguniaSize)}</div>
+            <div class="product-price">${priceDisplay}</div>
+            <div class="product-stock">${stockDisplay}</div>
             <div class="stock-bar">
                 <div class="stock-bar-fill ${stockBarClass}" style="width: ${stockPercentage}%"></div>
             </div>
         </div>
     `;
+}addToCart(product) {
+    const uom = product.uom || 'kg';
+    const existingIndex = this.cart.findIndex(item => item.productId === product.id);
+    
+    if (existingIndex >= 0) {
+        const item = this.cart[existingIndex];
+        let newQty = item.qty + 1;
+        let currentStock = this.getProductStock(product);
+        
+        if (newQty > currentStock) {
+            BashanPOS.showNotification('Not enough stock available!', 'warning');
+            return;
+        }
+        
+        item.qty = newQty;
+        item.qtyKg = this.convertToKg(product, newQty);
+        item.subtotal = this.calculateItemSubtotal(product, newQty);
+    } else {
+        let currentStock = this.getProductStock(product);
+        
+        if (currentStock <= 0) {
+            BashanPOS.showNotification('Product is out of stock!', 'error');
+            return;
+        }
+        
+        const cartItem = {
+            productId: product.id,
+            name: product.name,
+            uom: uom,
+            qty: 1,
+            maxStock: currentStock
+        };
+        
+        // Add UOM-specific properties
+        switch(uom) {
+            case 'kg':
+                cartItem.nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+                cartItem.pricePerKg = product.pricePerKg || 0;
+                cartItem.qtyKg = this.convertToKg(product, 1);
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'bags':
+                cartItem.kgPerBag = product.kgPerBag || 50;
+                cartItem.pricePerBag = product.pricePerBag || 0;
+                cartItem.qtyKg = this.convertToKg(product, 1);
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'litres':
+                cartItem.pricePerLitre = product.pricePerLitre || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'ml':
+                cartItem.pricePer100ml = product.pricePer100ml || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'pieces':
+                cartItem.pricePerPiece = product.pricePerPiece || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'grams':
+                cartItem.pricePerGram = product.pricePerGram || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'sachets':
+                cartItem.pricePerSachet = product.pricePerSachet || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'cartons':
+                cartItem.itemsPerCarton = product.itemsPerCarton || 12;
+                cartItem.pricePerCarton = product.pricePerCarton || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'rolls':
+                cartItem.pricePerRoll = product.pricePerRoll || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+            case 'metres':
+                cartItem.pricePerMetre = product.pricePerMetre || 0;
+                cartItem.subtotal = this.calculateItemSubtotal(product, 1);
+                break;
+        }
+        
+        this.cart.push(cartItem);
+    }
+    
+    this.renderCart();
+    this.updateCartSummary();
+    this.saveCart();
+    
+    if (navigator.vibrate) {
+        navigator.vibrate(20);
+    }
 }
-    
-    filterProducts(searchTerm) {
-        this.renderProducts(searchTerm);
-    }
-    
-    // ============ CART MANAGEMENT ============
-    addToCart(product) {
-        // Check if already in cart
-        const existingIndex = this.cart.findIndex(item => item.productId === product.id);
-        
-        if (existingIndex >= 0) {
-            // Increment quantity
-            const item = this.cart[existingIndex];
-            const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-            const newNgunia = item.qtyNgunia + 1;
-            const newKg = newNgunia * nguniaSize;
-            
-            if (newKg > product.currentStockKg) {
-                BashanPOS.showNotification('Not enough stock available!', 'warning');
-                return;
-            }
-            
-            item.qtyNgunia = newNgunia;
-            item.qtyKg = newKg;
-        } else {
-            // Add new item
-            const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-            
-            if (product.currentStockKg <= 0) {
-                BashanPOS.showNotification('Product is out of stock!', 'error');
-                return;
-            }
-            
-            this.cart.push({
-                productId: product.id,
-                name: product.name,
-                pricePerKg: product.pricePerKg,
-                nguniaSize: nguniaSize,
-                qtyNgunia: 1,
-                qtyKg: nguniaSize,
-                maxStock: product.currentStockKg
-            });
-        }
-        
-        this.renderCart();
-        this.updateCartSummary();
-        this.saveCart();
-        
-        // Haptic feedback if available
-        if (navigator.vibrate) {
-            navigator.vibrate(20);
-        }
-    }
     
     removeFromCart(index) {
         this.cart.splice(index, 1);
@@ -463,8 +620,7 @@ setupUI() {
         this.renderCart();
         this.updateCartSummary();
         this.saveCart();
-    }
-    renderCart() {
+    }renderCart() {
     const cartContainer = document.getElementById('cartItems');
     
     if (this.cart.length === 0) {
@@ -482,39 +638,74 @@ setupUI() {
     }
     
     cartContainer.innerHTML = this.cart.map((item, index) => {
-        // FIX: Ensure values are valid numbers
-        const qtyNgunia = (item.qtyNgunia && !isNaN(item.qtyNgunia)) ? item.qtyNgunia : 0;
-        const qtyKg = (item.qtyKg && !isNaN(item.qtyKg)) ? item.qtyKg : 0;
-        const nguniaSize = (item.nguniaSize && !isNaN(item.nguniaSize)) ? item.nguniaSize : 1000;
-        const pricePerKg = (item.pricePerKg && !isNaN(item.pricePerKg)) ? item.pricePerKg : 0;
-        const subtotal = qtyKg * pricePerKg;
+        const qty = item.qty || 0;
+        const subtotal = item.subtotal || 0;
+        let qtyLabel = '';
+        let unitLabel = '';
+        
+        switch(item.uom) {
+            case 'kg':
+                qtyLabel = `${qty.toFixed(3)} ngunias`;
+                unitLabel = `1 ngunia = ${item.nguniaSize || 1000}kg`;
+                break;
+            case 'bags':
+                qtyLabel = `${qty} bags`;
+                unitLabel = `${item.kgPerBag || 50}kg per bag`;
+                break;
+            case 'litres':
+                qtyLabel = `${qty.toFixed(2)} litres`;
+                unitLabel = 'per litre';
+                break;
+            case 'ml':
+                qtyLabel = `${qty.toFixed(0)} mL`;
+                unitLabel = 'per 100mL';
+                break;
+            case 'pieces':
+                qtyLabel = `${qty} pieces`;
+                unitLabel = 'per piece';
+                break;
+            case 'grams':
+                qtyLabel = `${qty}g`;
+                unitLabel = 'per gram';
+                break;
+            case 'sachets':
+                qtyLabel = `${qty} sachets`;
+                unitLabel = 'per sachet';
+                break;
+            case 'cartons':
+                qtyLabel = `${qty} cartons`;
+                unitLabel = `${item.itemsPerCarton || 12} items/carton`;
+                break;
+            case 'rolls':
+                qtyLabel = `${qty} rolls`;
+                unitLabel = 'per roll';
+                break;
+            case 'metres':
+                qtyLabel = `${qty.toFixed(2)} metres`;
+                unitLabel = 'per metre';
+                break;
+            default:
+                qtyLabel = `${qty} units`;
+                unitLabel = '';
+        }
         
         return `
         <div class="cart-item">
             <div class="cart-item-header">
                 <span class="cart-item-name">${item.name}</span>
+                <span class="cart-item-uom">${item.uom}</span>
                 <button class="remove-item-btn" onclick="posSystem.removeFromCart(${index})" title="Remove">×</button>
             </div>
             <div class="cart-item-inputs">
                 <div class="qty-input-group">
-                    <div class="qty-label">Ngunias</div>
+                    <div class="qty-label">Quantity</div>
                     <input type="number" 
                            class="qty-input" 
-                           value="${qtyNgunia.toFixed(3)}" 
-                           step="0.001" 
+                           value="${qty}" 
+                           step="${item.uom === 'kg' ? '0.001' : '1'}" 
                            min="0"
-                           onchange="posSystem.updateCartItemQuantity(${index}, 'ngunia', this.value)">
-                    <div class="qty-unit">1 ngunia = ${nguniaSize}kg</div>
-                </div>
-                <div class="qty-input-group">
-                    <div class="qty-label">Kilograms</div>
-                    <input type="number" 
-                           class="qty-input" 
-                           value="${qtyKg.toFixed(2)}" 
-                           step="0.01" 
-                           min="0"
-                           onchange="posSystem.updateCartItemQuantity(${index}, 'kg', this.value)">
-                    <div class="qty-unit">kg</div>
+                           onchange="posSystem.updateCartItemQuantity(${index}, this.value)">
+                    <div class="qty-unit">${unitLabel}</div>
                 </div>
             </div>
             <div class="cart-item-subtotal">
@@ -524,6 +715,88 @@ setupUI() {
         `;
     }).join('');
 }
+
+
+getProductStock(product) {
+    const uom = product.uom || 'kg';
+    switch(uom) {
+        case 'kg': return product.currentStockKg || 0;
+        case 'bags': return product.currentStockCount || 0;
+        case 'litres': return product.currentStockLitres || 0;
+        case 'ml': return product.currentStockMl || 0;
+        case 'pieces': return product.currentStockCount || 0;
+        case 'grams': return product.currentStockGrams || 0;
+        case 'sachets': return product.currentStockCount || 0;
+        case 'cartons': return product.currentStockCount || 0;
+        case 'rolls': return product.currentStockCount || 0;
+        case 'metres': return product.currentStockMetres || 0;
+        default: return product.currentStockKg || 0;
+    }
+}
+
+convertToKg(product, qty) {
+    const uom = product.uom || 'kg';
+    switch(uom) {
+        case 'kg': return qty * (product.nguniaKg || 1000);
+        case 'bags': return qty * (product.kgPerBag || 50);
+        default: return qty; // Non-weight items
+    }
+}
+
+calculateItemSubtotal(product, qty) {
+    const uom = product.uom || 'kg';
+    switch(uom) {
+        case 'kg': return qty * (product.nguniaKg || 1000) * (product.pricePerKg || 0);
+        case 'bags': return qty * (product.pricePerBag || 0);
+        case 'litres': return qty * (product.pricePerLitre || 0);
+        case 'ml': return qty * (product.pricePer100ml || 0);
+        case 'pieces': return qty * (product.pricePerPiece || 0);
+        case 'grams': return qty * (product.pricePerGram || 0);
+        case 'sachets': return qty * (product.pricePerSachet || 0);
+        case 'cartons': return qty * (product.pricePerCarton || 0);
+        case 'rolls': return qty * (product.pricePerRoll || 0);
+        case 'metres': return qty * (product.pricePerMetre || 0);
+        default: return qty * (product.pricePerKg || 0);
+    }
+}
+
+updateCartItemQuantity(index, value) {
+    const item = this.cart[index];
+    if (!item) return;
+    
+    const product = this.products.find(p => p.id === item.productId);
+    if (!product) return;
+    
+    let newQty = parseFloat(value) || 0;
+    const currentStock = this.getProductStock(product);
+    
+    if (newQty < 0) {
+        BashanPOS.showNotification('Quantity cannot be negative', 'warning');
+        this.renderCart();
+        return;
+    }
+    
+    if (newQty > currentStock) {
+        BashanPOS.showNotification(`Only ${currentStock} available`, 'warning');
+        newQty = currentStock;
+    }
+    
+    if (newQty === 0) {
+        this.removeFromCart(index);
+        return;
+    }
+    
+    item.qty = newQty;
+    item.qtyKg = this.convertToKg(product, newQty);
+    item.subtotal = this.calculateItemSubtotal(product, newQty);
+    
+    this.renderCart();
+    this.updateCartSummary();
+    this.saveCart();
+}
+
+
+    
     
     updateCartSummary() {
         const subtotal = this.cart.reduce((sum, item) => sum + (item.qtyKg * item.pricePerKg), 0);
