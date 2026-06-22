@@ -16,17 +16,13 @@ class InventorySystem {
     }
     
     async init() {
-    // Check if BashanPOS is loaded
-    if (!window.BashanPOS) {
-        console.error('❌ BashanPOS not loaded. Retrying in 1 second...');
-        setTimeout(() => this.init(), 1000);
-        return;
-    }
-    
-    this.user = BashanPOS.checkAuth();
-    if (!this.user) return;
-    
-    // ... rest of your init code
+        // Check if BashanPOS is loaded
+        if (!window.BashanPOS) {
+            console.error('❌ BashanPOS not loaded. Retrying...');
+            setTimeout(() => this.init(), 500);
+            return;
+        }
+        
         this.user = BashanPOS.checkAuth();
         if (!this.user) return;
         
@@ -41,11 +37,12 @@ class InventorySystem {
         
         this.setupUI();
         this.setupEventListeners();
-        await this.loadCategories();
+        await this.initializeCategories();
         await this.loadProducts();
         this.loadStats();
         
         BashanPOS.logAudit('INVENTORY_OPEN', 'Inventory page loaded');
+        console.log('✅ Inventory System Ready');
     }
     
     setupUI() {
@@ -88,6 +85,9 @@ class InventorySystem {
         document.getElementById('cancelProductBtn').addEventListener('click', () => this.closeProductModal());
         document.getElementById('saveProductBtn').addEventListener('click', () => this.saveProduct());
         
+        // Make category dropdown searchable/typeable
+        this.setupCategoryDropdown();
+        
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => BashanPOS.logout());
         
@@ -109,17 +109,122 @@ class InventorySystem {
     }
     
     // ============ CATEGORIES ============
-    async loadCategories() {
+    async initializeCategories() {
         try {
             const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
-            this.categories = [];
-            snapshot.forEach(doc => {
-                this.categories.push({ id: doc.id, ...doc.data() });
-            });
+            
+            if (snapshot.empty) {
+                // No categories exist - create defaults
+                console.log('📝 Creating default categories...');
+                await this.createDefaultCategories();
+                // Reload
+                const newSnapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
+                this.processCategories(newSnapshot);
+            } else {
+                this.processCategories(snapshot);
+            }
             
             this.populateCategoryDropdowns();
+            console.log('✅ Categories loaded:', this.categories.length);
         } catch (error) {
-            console.error('Load categories error:', error);
+            console.error('❌ Load categories error:', error);
+            // Try to create defaults on error
+            await this.createDefaultCategories();
+            const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
+            this.processCategories(snapshot);
+            this.populateCategoryDropdowns();
+        }
+    }
+    
+    processCategories(snapshot) {
+        this.categories = [];
+        snapshot.forEach(doc => {
+            this.categories.push({ id: doc.id, ...doc.data() });
+        });
+    }
+    
+    async createDefaultCategories() {
+        const defaults = [
+            { name: 'Feeds', displayOrder: 0 },
+            { name: 'Insecticides', displayOrder: 1 },
+            { name: 'Supplements', displayOrder: 2 },
+            { name: 'Seeds', displayOrder: 3 },
+            { name: 'Equipment', displayOrder: 4 },
+            { name: 'Medicines', displayOrder: 5 },
+            { name: 'Other', displayOrder: 6 }
+        ];
+        
+        const batch = BashanPOS.db.batch();
+        
+        defaults.forEach(cat => {
+            const ref = BashanPOS.categoriesRef.doc();
+            batch.set(ref, {
+                name: cat.name,
+                displayOrder: cat.displayOrder,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+        
+        await batch.commit();
+        console.log('✅ Default categories created');
+    }
+    
+    setupCategoryDropdown() {
+        const productCategory = document.getElementById('productCategory');
+        
+        // Make it so user can type custom category or select from list
+        productCategory.addEventListener('change', (e) => {
+            const value = e.target.value;
+            
+            // If user typed something that's not in the list, ask if they want to add it
+            if (value && value !== '__add_new__' && !this.categories.find(c => c.id === value || c.name === value)) {
+                // User typed a custom category
+                this.addCustomCategory(value);
+            }
+            
+            if (value === '__add_new__') {
+                const newCat = prompt('Enter new category name:');
+                if (newCat && newCat.trim()) {
+                    this.addCustomCategory(newCat.trim());
+                } else {
+                    productCategory.value = '';
+                }
+            }
+        });
+    }
+    
+    async addCustomCategory(categoryName) {
+        try {
+            // Check if category already exists
+            const exists = this.categories.find(c => 
+                c.name.toLowerCase() === categoryName.toLowerCase()
+            );
+            
+            if (exists) {
+                document.getElementById('productCategory').value = exists.id;
+                return;
+            }
+            
+            // Add new category
+            const docRef = await BashanPOS.categoriesRef.add({
+                name: categoryName,
+                displayOrder: this.categories.length,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Reload categories
+            const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
+            this.processCategories(snapshot);
+            this.populateCategoryDropdowns();
+            
+            // Set the new category as selected
+            document.getElementById('productCategory').value = docRef.id;
+            
+            BashanPOS.showNotification(`Category "${categoryName}" added!`, 'success');
+            BashanPOS.logAudit('CATEGORY_ADD', `Added category: ${categoryName}`);
+        } catch (error) {
+            console.error('Add category error:', error);
+            BashanPOS.showNotification('Failed to add category', 'error');
         }
     }
     
@@ -128,20 +233,27 @@ class InventorySystem {
         const productSelect = document.getElementById('productCategory');
         const historySelect = document.getElementById('historyProduct');
         
-        // Clear existing options (keep first)
+        // Populate filter dropdown
         filterSelect.innerHTML = '<option value="all">All Categories</option>';
-        productSelect.innerHTML = '<option value="">Select category...</option>';
-        
         this.categories.forEach(cat => {
             filterSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
-            productSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
         });
         
-        // Populate history product filter
-        historySelect.innerHTML = '<option value="all">All Products</option>';
-        this.products.forEach(p => {
-            historySelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+        // Populate product form dropdown - NOW WITH TYPEABLE OPTION
+        productSelect.innerHTML = '<option value="">Select or type category...</option>';
+        this.categories.forEach(cat => {
+            productSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
         });
+        // Add "add new" option
+        productSelect.innerHTML += '<option value="__add_new__" style="color: #4caf50; font-style: italic;">+ Add New Category...</option>';
+        
+        // Populate history product filter
+        if (historySelect) {
+            historySelect.innerHTML = '<option value="all">All Products</option>';
+            this.products.forEach(p => {
+                historySelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+            });
+        }
     }
     
     // ============ PRODUCTS ============
@@ -153,12 +265,25 @@ class InventorySystem {
                 this.products.push({ id: doc.id, ...doc.data() });
             });
             
+            console.log('✅ Products loaded:', this.products.length);
             this.renderTable();
             this.loadStats();
             this.populateCategoryDropdowns();
         } catch (error) {
-            console.error('Load products error:', error);
+            console.error('❌ Load products error:', error);
             BashanPOS.showNotification('Failed to load products', 'error');
+            
+            // Show error in table
+            const tbody = document.getElementById('inventoryTableBody');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">
+                        <p>⚠️ Failed to load products</p>
+                        <p style="font-size:12px;color:var(--danger);">${error.message}</p>
+                        <button onclick="location.reload()" class="outline-btn" style="margin-top:10px;">🔄 Retry</button>
+                    </td>
+                </tr>
+            `;
         }
     }
     
@@ -168,13 +293,21 @@ class InventorySystem {
         const statusFilter = document.getElementById('filterStatus').value;
         
         return this.products.filter(product => {
-            const matchesSearch = !searchTerm || product.name.toLowerCase().includes(searchTerm);
+            const matchesSearch = !searchTerm || 
+                (product.name && product.name.toLowerCase().includes(searchTerm));
             const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
             
+            const stock = product.currentStockKg || 0;
+            const threshold = product.lowStockThreshold || 100;
+            
             let matchesStatus = true;
-            if (statusFilter === 'in-stock') matchesStatus = product.currentStockKg > (product.lowStockThreshold || 100);
-            else if (statusFilter === 'low-stock') matchesStatus = product.currentStockKg <= (product.lowStockThreshold || 100) && product.currentStockKg > 0;
-            else if (statusFilter === 'out-of-stock') matchesStatus = product.currentStockKg <= 0;
+            if (statusFilter === 'in-stock') {
+                matchesStatus = stock > threshold;
+            } else if (statusFilter === 'low-stock') {
+                matchesStatus = stock <= threshold && stock > 0;
+            } else if (statusFilter === 'out-of-stock') {
+                matchesStatus = stock <= 0;
+            }
             
             return matchesSearch && matchesCategory && matchesStatus;
         });
@@ -185,7 +318,14 @@ class InventorySystem {
         const tbody = document.getElementById('inventoryTableBody');
         
         if (filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No products found</td></tr>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">
+                        <p>📦 No products found</p>
+                        <p style="font-size:12px;">Try adjusting your filters or add a new product</p>
+                    </td>
+                </tr>
+            `;
             return;
         }
         
@@ -237,12 +377,12 @@ class InventorySystem {
             stockBarClass = 'good';
         }
         
-        const stockPercentage = Math.min(100, (stock / (nguniaSize * 10)) * 100);
-        const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'N/A';
+        const stockPercentage = Math.min(100, Math.max(0, (stock / (nguniaSize * 10)) * 100));
+        const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'Uncategorized';
         
         return `
             <tr class="${rowClass}" data-product-id="${product.id}">
-                <td class="product-name-cell">${product.name}</td>
+                <td class="product-name-cell">${product.name || 'Unnamed'}</td>
                 <td>${categoryName}</td>
                 <td>${nguniaSize} kg</td>
                 <td class="stock-display">
@@ -251,7 +391,7 @@ class InventorySystem {
                         <div class="stock-level-fill ${stockBarClass}" style="width:${stockPercentage}%"></div>
                     </div>
                 </td>
-                <td>${BashanPOS.formatCurrency(product.pricePerKg)}/kg</td>
+                <td>${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg</td>
                 <td><span class="status-badge ${statusClass}">${status}</span></td>
                 <td>
                     <div class="action-btns">
@@ -268,9 +408,9 @@ class InventorySystem {
         const threshold = this.settings?.lowStockThreshold || 100;
         
         const totalProducts = this.products.length;
-        const lowStock = this.products.filter(p => p.currentStockKg <= threshold && p.currentStockKg > 0).length;
-        const outOfStock = this.products.filter(p => p.currentStockKg <= 0).length;
-        const totalValue = this.products.reduce((sum, p) => sum + (p.currentStockKg * p.pricePerKg), 0);
+        const lowStock = this.products.filter(p => (p.currentStockKg || 0) <= threshold && (p.currentStockKg || 0) > 0).length;
+        const outOfStock = this.products.filter(p => (p.currentStockKg || 0) <= 0).length;
+        const totalValue = this.products.reduce((sum, p) => sum + ((p.currentStockKg || 0) * (p.pricePerKg || 0)), 0);
         
         document.getElementById('totalProducts').textContent = totalProducts;
         document.getElementById('lowStockCount').textContent = lowStock;
@@ -290,11 +430,11 @@ class InventorySystem {
         document.getElementById('adjustProductInfo').innerHTML = `
             <div class="product-name-lg">${product.name}</div>
             <div class="product-meta">
-                <span>Current: ${BashanPOS.formatStock(product.currentStockKg, product.nguniaKg || 1000)}</span>
-                <span>Price: ${BashanPOS.formatCurrency(product.pricePerKg)}/kg</span>
+                <span>Current: ${BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000)}</span>
+                <span>Price: ${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg</span>
             </div>
         `;
-        document.getElementById('currentStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg, product.nguniaKg || 1000);
+        document.getElementById('currentStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
         
         // Reset form
         document.getElementById('adjNgunias').value = '0';
@@ -303,7 +443,7 @@ class InventorySystem {
         document.getElementById('adjOtherReason').value = '';
         document.getElementById('adjNotes').value = '';
         document.getElementById('adjTotalDisplay').textContent = '0 kg (0 ngunias)';
-        document.getElementById('newStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg, product.nguniaKg || 1000);
+        document.getElementById('newStockDisplay').textContent = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
         document.getElementById('otherReasonGroup').style.display = 'none';
         
         this.setAdjustmentType('add');
@@ -335,7 +475,7 @@ class InventorySystem {
         document.getElementById('adjTotalDisplay').textContent = 
             `${totalKg.toFixed(2)} kg (${(totalKg / nguniaSize).toFixed(3)} ngunias)`;
         
-        const currentStock = this.currentAdjustProduct.currentStockKg;
+        const currentStock = this.currentAdjustProduct.currentStockKg || 0;
         const newStock = this.adjustmentType === 'add' ? currentStock + totalKg : currentStock - totalKg;
         document.getElementById('newStockDisplay').textContent = 
             BashanPOS.formatStock(Math.max(0, newStock), nguniaSize);
@@ -354,7 +494,7 @@ class InventorySystem {
             return;
         }
         
-        if (this.adjustmentType === 'remove' && totalKg > this.currentAdjustProduct.currentStockKg) {
+        if (this.adjustmentType === 'remove' && totalKg > (this.currentAdjustProduct.currentStockKg || 0)) {
             BashanPOS.showNotification('Cannot remove more than current stock', 'error');
             return;
         }
@@ -375,8 +515,8 @@ class InventorySystem {
         
         const notes = document.getElementById('adjNotes').value;
         const newStock = this.adjustmentType === 'add' 
-            ? this.currentAdjustProduct.currentStockKg + totalKg
-            : this.currentAdjustProduct.currentStockKg - totalKg;
+            ? (this.currentAdjustProduct.currentStockKg || 0) + totalKg
+            : (this.currentAdjustProduct.currentStockKg || 0) - totalKg;
         
         const confirmed = await BashanPOS.showConfirm(
             `${this.adjustmentType === 'add' ? 'Add' : 'Remove'} ${totalKg.toFixed(2)} kg ` +
@@ -429,84 +569,86 @@ class InventorySystem {
         if (!product) return;
         
         const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const ngunias = Math.floor(product.currentStockKg / nguniaSize);
-        const remainder = product.currentStockKg % nguniaSize;
+        const stock = product.currentStockKg || 0;
+        const ngunias = Math.floor(stock / nguniaSize);
+        const remainder = stock % nguniaSize;
         
         document.getElementById('productModalTitle').textContent = 'Edit Product';
         document.getElementById('editProductId').value = product.id;
-        document.getElementById('productName').value = product.name;
+        document.getElementById('productName').value = product.name || '';
         document.getElementById('productCategory').value = product.category || '';
-        document.getElementById('productPrice').value = product.pricePerKg;
+        document.getElementById('productPrice').value = product.pricePerKg || '';
         document.getElementById('productNguniaSize').value = nguniaSize;
         document.getElementById('productInitNgunias').value = ngunias;
         document.getElementById('productInitKg').value = remainder.toFixed(2);
         document.getElementById('productThreshold').value = product.lowStockThreshold || 100;
         
         document.getElementById('addProductModal').classList.add('active');
-    }async saveProduct() {
-    const editId = document.getElementById('editProductId').value;
-    const name = document.getElementById('productName').value.trim();
-    const category = document.getElementById('productCategory').value;
-    const pricePerKg = parseFloat(document.getElementById('productPrice').value);
-    const nguniaSize = parseInt(document.getElementById('productNguniaSize').value);
-    const initNgunias = parseFloat(document.getElementById('productInitNgunias').value) || 0;
-    const initKg = parseFloat(document.getElementById('productInitKg').value) || 0;
-    const threshold = parseInt(document.getElementById('productThreshold').value) || 100;
-    
-    // Validation
-    if (!name) {
-        BashanPOS.showNotification('Product name is required', 'warning');
-        return;
-    }
-    if (isNaN(pricePerKg) || pricePerKg <= 0) {
-        BashanPOS.showNotification('Valid price is required', 'warning');
-        return;
-    }
-    if (isNaN(nguniaSize) || nguniaSize <= 0) {
-        BashanPOS.showNotification('Valid ngunia size is required', 'warning');
-        return;
     }
     
-    const totalStock = (initNgunias * nguniaSize) + initKg;
-    
-    // FIX: Ensure totalStock is a valid number
-    if (isNaN(totalStock) || totalStock < 0) {
-        BashanPOS.showNotification('Invalid stock calculation', 'error');
-        return;
-    }
-    
-    const productData = {
-        name: name,
-        category: category || '',
-        pricePerKg: pricePerKg,
-        nguniaKg: nguniaSize,
-        currentStockKg: totalStock,
-        lowStockThreshold: threshold,
-        archived: false,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    
-    try {
-        if (editId) {
-            // Update existing product
-            await BashanPOS.productsRef.doc(editId).update(productData);
-            BashanPOS.showNotification('Product updated successfully!', 'success');
-            BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name}`);
-        } else {
-            // Add new product
-            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            await BashanPOS.productsRef.add(productData);
-            BashanPOS.showNotification('Product added successfully!', 'success');
-            BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name}`);
+    async saveProduct() {
+        const editId = document.getElementById('editProductId').value;
+        const name = document.getElementById('productName').value.trim();
+        const category = document.getElementById('productCategory').value;
+        const pricePerKg = parseFloat(document.getElementById('productPrice').value);
+        const nguniaSize = parseInt(document.getElementById('productNguniaSize').value);
+        const initNgunias = parseFloat(document.getElementById('productInitNgunias').value) || 0;
+        const initKg = parseFloat(document.getElementById('productInitKg').value) || 0;
+        const threshold = parseInt(document.getElementById('productThreshold').value) || 100;
+        
+        // Validation
+        if (!name) {
+            BashanPOS.showNotification('Product name is required', 'warning');
+            return;
+        }
+        if (isNaN(pricePerKg) || pricePerKg <= 0) {
+            BashanPOS.showNotification('Valid price is required', 'warning');
+            return;
+        }
+        if (isNaN(nguniaSize) || nguniaSize <= 0) {
+            BashanPOS.showNotification('Valid ngunia size is required', 'warning');
+            return;
         }
         
-        this.closeProductModal();
-        await this.loadProducts();
-    } catch (error) {
-        console.error('Save product error:', error);
-        BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
+        const totalStock = (initNgunias * nguniaSize) + initKg;
+        
+        if (isNaN(totalStock) || totalStock < 0) {
+            BashanPOS.showNotification('Invalid stock calculation', 'error');
+            return;
+        }
+        
+        const productData = {
+            name: name,
+            category: category || '',
+            pricePerKg: pricePerKg,
+            nguniaKg: nguniaSize,
+            currentStockKg: totalStock,
+            lowStockThreshold: threshold,
+            archived: false,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        console.log('💾 Saving product:', productData);
+        
+        try {
+            if (editId) {
+                await BashanPOS.productsRef.doc(editId).update(productData);
+                BashanPOS.showNotification('Product updated successfully!', 'success');
+                BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name}`);
+            } else {
+                productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await BashanPOS.productsRef.add(productData);
+                BashanPOS.showNotification('Product added successfully!', 'success');
+                BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name}`);
+            }
+            
+            this.closeProductModal();
+            await this.loadProducts();
+        } catch (error) {
+            console.error('❌ Save product error:', error);
+            BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
+        }
     }
-}
     
     closeProductModal() {
         document.getElementById('addProductModal').classList.remove('active');
@@ -566,7 +708,7 @@ class InventorySystem {
         } catch (error) {
             console.error('Load history error:', error);
             document.getElementById('historyTableBody').innerHTML = 
-                '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted);">Failed to load history</td></tr>';
+                '<tr><td colspan="8" style="text-align:center;padding:30px;">Failed to load history</td></tr>';
         }
     }
     
@@ -574,7 +716,7 @@ class InventorySystem {
         const tbody = document.getElementById('historyTableBody');
         
         if (this.historyData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted);">No stock movements found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;">No stock movements found</td></tr>';
             return;
         }
         
@@ -583,9 +725,9 @@ class InventorySystem {
                 <td>${BashanPOS.formatDate(log.timestamp)}</td>
                 <td>${log.productName}</td>
                 <td><span class="type-badge ${log.type}">${log.type === 'add' ? 'Added' : 'Removed'}</span></td>
-                <td>${log.quantityKg?.toFixed(2)} kg (${log.quantityNgunia?.toFixed(3)} ngunias)</td>
-                <td>${log.beforeStock?.toFixed(2)} kg</td>
-                <td>${log.afterStock?.toFixed(2)} kg</td>
+                <td>${(log.quantityKg || 0).toFixed(2)} kg (${(log.quantityNgunia || 0).toFixed(3)} ngunias)</td>
+                <td>${(log.beforeStock || 0).toFixed(2)} kg</td>
+                <td>${(log.afterStock || 0).toFixed(2)} kg</td>
                 <td>${log.reason}</td>
                 <td>${log.doneByName}</td>
             </tr>
@@ -600,15 +742,21 @@ class InventorySystem {
     exportInventory() {
         const filtered = this.getFilteredProducts();
         
+        if (filtered.length === 0) {
+            BashanPOS.showNotification('No data to export', 'warning');
+            return;
+        }
+        
         let csv = 'Product,Category,Ngunia Size (kg),Current Stock (kg),Price/kg (KSH),Stock Value,Status\n';
         
         filtered.forEach(p => {
             const nguniaSize = p.nguniaKg || 1000;
-            const status = p.currentStockKg <= 0 ? 'Out of Stock' : 
-                          p.currentStockKg <= (p.lowStockThreshold || 100) ? 'Low Stock' : 'In Stock';
+            const stock = p.currentStockKg || 0;
+            const status = stock <= 0 ? 'Out of Stock' : 
+                          stock <= (p.lowStockThreshold || 100) ? 'Low Stock' : 'In Stock';
             const categoryName = this.categories.find(c => c.id === p.category)?.name || 'N/A';
             
-            csv += `"${p.name}","${categoryName}",${nguniaSize},${p.currentStockKg},${p.pricePerKg},${p.currentStockKg * p.pricePerKg},"${status}"\n`;
+            csv += `"${p.name}","${categoryName}",${nguniaSize},${stock},${p.pricePerKg || 0},${stock * (p.pricePerKg || 0)},"${status}"\n`;
         });
         
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -632,7 +780,7 @@ class InventorySystem {
         
         this.historyData.forEach(log => {
             csv += `"${BashanPOS.formatDate(log.timestamp)}","${log.productName}","${log.type}",` +
-                   `${log.quantityKg},${log.quantityNgunia},${log.beforeStock},${log.afterStock},` +
+                   `${log.quantityKg || 0},${log.quantityNgunia || 0},${log.beforeStock || 0},${log.afterStock || 0},` +
                    `"${log.reason}","${log.doneByName}"\n`;
         });
         
