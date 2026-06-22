@@ -444,7 +444,7 @@ class BashanPOSSystem {
         }
     }
     
-    // ============ CART ============
+    // ============ CART ============    // ============ CART ============
     addToCart(product) {
         const uom = product.uom || 'kg';
         const existingIndex = this.cart.findIndex(item => item.productId === product.id);
@@ -480,26 +480,71 @@ class BashanPOSSystem {
                 maxStock: currentStock
             };
             
+            // Copy UOM-specific properties
             switch(uom) {
                 case 'kg':
                     cartItem.nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
                     cartItem.pricePerKg = product.pricePerKg || 0;
+                    cartItem.displayUnit = 'ngunia';
+                    cartItem.unitLabel = '1 ngunia = ' + cartItem.nguniaSize + 'kg';
+                    cartItem.stepSize = 0.001;
                     break;
                 case 'bags':
                     cartItem.kgPerBag = product.kgPerBag || 50;
                     cartItem.pricePerBag = product.pricePerBag || 0;
+                    cartItem.displayUnit = 'bag';
+                    cartItem.unitLabel = (product.kgPerBag || 50) + 'kg per bag';
+                    cartItem.stepSize = 1;
                     break;
-                case 'litres': cartItem.pricePerLitre = product.pricePerLitre || 0; break;
-                case 'ml': cartItem.pricePer100ml = product.pricePer100ml || 0; break;
-                case 'pieces': cartItem.pricePerPiece = product.pricePerPiece || 0; break;
-                case 'grams': cartItem.pricePerGram = product.pricePerGram || 0; break;
-                case 'sachets': cartItem.pricePerSachet = product.pricePerSachet || 0; break;
+                case 'litres':
+                    cartItem.pricePerLitre = product.pricePerLitre || 0;
+                    cartItem.displayUnit = 'litre';
+                    cartItem.unitLabel = 'per litre';
+                    cartItem.stepSize = 0.01;
+                    break;
+                case 'ml':
+                    cartItem.pricePer100ml = product.pricePer100ml || 0;
+                    cartItem.displayUnit = 'mL';
+                    cartItem.unitLabel = 'per 100mL';
+                    cartItem.stepSize = 1;
+                    break;
+                case 'pieces':
+                    cartItem.pricePerPiece = product.pricePerPiece || 0;
+                    cartItem.displayUnit = 'piece';
+                    cartItem.unitLabel = 'per piece';
+                    cartItem.stepSize = 1;
+                    break;
+                case 'grams':
+                    cartItem.pricePerGram = product.pricePerGram || 0;
+                    cartItem.displayUnit = 'gram';
+                    cartItem.unitLabel = 'per gram';
+                    cartItem.stepSize = 1;
+                    break;
+                case 'sachets':
+                    cartItem.pricePerSachet = product.pricePerSachet || 0;
+                    cartItem.displayUnit = 'sachet';
+                    cartItem.unitLabel = 'per sachet';
+                    cartItem.stepSize = 1;
+                    break;
                 case 'cartons':
                     cartItem.itemsPerCarton = product.itemsPerCarton || 12;
                     cartItem.pricePerCarton = product.pricePerCarton || 0;
+                    cartItem.displayUnit = 'carton';
+                    cartItem.unitLabel = (product.itemsPerCarton || 12) + ' items per carton';
+                    cartItem.stepSize = 1;
                     break;
-                case 'rolls': cartItem.pricePerRoll = product.pricePerRoll || 0; break;
-                case 'metres': cartItem.pricePerMetre = product.pricePerMetre || 0; break;
+                case 'rolls':
+                    cartItem.pricePerRoll = product.pricePerRoll || 0;
+                    cartItem.displayUnit = 'roll';
+                    cartItem.unitLabel = 'per roll';
+                    cartItem.stepSize = 1;
+                    break;
+                case 'metres':
+                    cartItem.pricePerMetre = product.pricePerMetre || 0;
+                    cartItem.displayUnit = 'metre';
+                    cartItem.unitLabel = 'per metre';
+                    cartItem.stepSize = 0.01;
+                    break;
             }
             
             this.cart.push(cartItem);
@@ -575,72 +620,103 @@ class BashanPOSSystem {
         cartContainer.innerHTML = this.cart.map((item, index) => {
             const qty = item.qty || 0;
             const subtotal = item.subtotal || 0;
-            let qtyLabel = '';
-            let unitLabel = '';
+            const uom = item.uom || 'kg';
             
-            switch(item.uom) {
+            let qtyDisplay = '';
+            let unitLabel = item.unitLabel || '';
+            let stepSize = item.stepSize || 1;
+            
+            // Format quantity based on UOM
+            switch(uom) {
                 case 'kg':
-                    qtyLabel = qty.toFixed(3) + ' ngunias';
+                    qtyDisplay = qty.toFixed(3);
                     unitLabel = '1 ngunia = ' + (item.nguniaSize || 1000) + 'kg';
+                    stepSize = 0.001;
                     break;
                 case 'bags':
-                    qtyLabel = qty + ' bags';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = (item.kgPerBag || 50) + 'kg per bag';
+                    stepSize = 1;
                     break;
                 case 'litres':
-                    qtyLabel = qty.toFixed(2) + ' litres';
+                    qtyDisplay = qty.toFixed(2);
                     unitLabel = 'per litre';
+                    stepSize = 0.01;
                     break;
                 case 'ml':
-                    qtyLabel = qty.toFixed(0) + ' mL';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = 'per 100mL';
+                    stepSize = 1;
                     break;
                 case 'pieces':
-                    qtyLabel = qty + ' pieces';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = 'per piece';
+                    stepSize = 1;
                     break;
                 case 'grams':
-                    qtyLabel = qty + 'g';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = 'per gram';
+                    stepSize = 1;
                     break;
                 case 'sachets':
-                    qtyLabel = qty + ' sachets';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = 'per sachet';
+                    stepSize = 1;
                     break;
                 case 'cartons':
-                    qtyLabel = qty + ' cartons';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = (item.itemsPerCarton || 12) + ' items/carton';
+                    stepSize = 1;
                     break;
                 case 'rolls':
-                    qtyLabel = qty + ' rolls';
+                    qtyDisplay = Math.round(qty).toString();
                     unitLabel = 'per roll';
+                    stepSize = 1;
                     break;
                 case 'metres':
-                    qtyLabel = qty.toFixed(2) + ' metres';
+                    qtyDisplay = qty.toFixed(2);
                     unitLabel = 'per metre';
+                    stepSize = 0.01;
                     break;
                 default:
-                    qtyLabel = qty + ' units';
-                    unitLabel = '';
+                    qtyDisplay = qty.toString();
+            }
+            
+            // Get unit display name
+            let unitName = uom;
+            switch(uom) {
+                case 'kg': unitName = 'ngunias'; break;
+                case 'bags': unitName = 'bags'; break;
+                case 'litres': unitName = 'litres'; break;
+                case 'ml': unitName = 'mL'; break;
+                case 'pieces': unitName = 'pieces'; break;
+                case 'grams': unitName = 'grams'; break;
+                case 'sachets': unitName = 'sachets'; break;
+                case 'cartons': unitName = 'cartons'; break;
+                case 'rolls': unitName = 'rolls'; break;
+                case 'metres': unitName = 'metres'; break;
             }
             
             return `
             <div class="cart-item">
                 <div class="cart-item-header">
                     <span class="cart-item-name">${item.name}</span>
-                    <span class="cart-item-uom">${item.uom}</span>
+                    <span class="cart-item-uom">${uom}</span>
                     <button class="remove-item-btn" onclick="posSystem.removeFromCart(${index})" title="Remove">×</button>
                 </div>
-                <div class="cart-item-inputs">
+                <div class="cart-item-details">
                     <div class="qty-input-group">
-                        <div class="qty-label">Quantity</div>
+                        <div class="qty-label">Quantity (${unitName})</div>
                         <input type="number" 
                                class="qty-input" 
-                               value="${qty}" 
-                               step="${item.uom === 'kg' ? '0.001' : '1'}" 
+                               value="${qtyDisplay}" 
+                               step="${stepSize}" 
                                min="0"
                                onchange="posSystem.updateCartQuantity(${index}, this.value)">
                         <div class="qty-unit">${unitLabel}</div>
+                    </div>
+                    <div class="cart-item-price">
+                        ${this.getPricePerUnitDisplay(item)}
                     </div>
                 </div>
                 <div class="cart-item-subtotal">
@@ -649,6 +725,22 @@ class BashanPOSSystem {
             </div>
             `;
         }).join('');
+    }
+    
+    getPricePerUnitDisplay(item) {
+        switch(item.uom) {
+            case 'kg': return BashanPOS.formatCurrency(item.pricePerKg || 0) + '/kg';
+            case 'bags': return BashanPOS.formatCurrency(item.pricePerBag || 0) + '/bag';
+            case 'litres': return BashanPOS.formatCurrency(item.pricePerLitre || 0) + '/L';
+            case 'ml': return BashanPOS.formatCurrency(item.pricePer100ml || 0) + '/100mL';
+            case 'pieces': return BashanPOS.formatCurrency(item.pricePerPiece || 0) + '/pc';
+            case 'grams': return BashanPOS.formatCurrency(item.pricePerGram || 0) + '/g';
+            case 'sachets': return BashanPOS.formatCurrency(item.pricePerSachet || 0) + '/sachet';
+            case 'cartons': return BashanPOS.formatCurrency(item.pricePerCarton || 0) + '/carton';
+            case 'rolls': return BashanPOS.formatCurrency(item.pricePerRoll || 0) + '/roll';
+            case 'metres': return BashanPOS.formatCurrency(item.pricePerMetre || 0) + '/m';
+            default: return '';
+        }
     }
     
     updateCartSummary() {
@@ -693,6 +785,29 @@ class BashanPOSSystem {
                     if (product) {
                         item.maxStock = this.getProductStock(product);
                         item.subtotal = this.calculateItemSubtotal(product, item.qty || 1);
+                        item.qtyKg = this.convertToKg(product, item.qty || 1);
+                        // Restore UOM-specific properties
+                        switch(item.uom) {
+                            case 'kg':
+                                item.nguniaSize = product.nguniaKg || 1000;
+                                item.pricePerKg = product.pricePerKg || 0;
+                                break;
+                            case 'bags':
+                                item.kgPerBag = product.kgPerBag || 50;
+                                item.pricePerBag = product.pricePerBag || 0;
+                                break;
+                            case 'litres': item.pricePerLitre = product.pricePerLitre || 0; break;
+                            case 'ml': item.pricePer100ml = product.pricePer100ml || 0; break;
+                            case 'pieces': item.pricePerPiece = product.pricePerPiece || 0; break;
+                            case 'grams': item.pricePerGram = product.pricePerGram || 0; break;
+                            case 'sachets': item.pricePerSachet = product.pricePerSachet || 0; break;
+                            case 'cartons':
+                                item.itemsPerCarton = product.itemsPerCarton || 12;
+                                item.pricePerCarton = product.pricePerCarton || 0;
+                                break;
+                            case 'rolls': item.pricePerRoll = product.pricePerRoll || 0; break;
+                            case 'metres': item.pricePerMetre = product.pricePerMetre || 0; break;
+                        }
                     }
                 });
                 this.renderCart();
@@ -703,7 +818,6 @@ class BashanPOSSystem {
             }
         }
     }
-    
     // ============ COMPLETE SALE ============
     async completeSale() {
         if (this.cart.length === 0) {
