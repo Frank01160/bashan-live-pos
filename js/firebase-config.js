@@ -15,14 +15,12 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-// We don't use Firebase Auth - we use custom password hashing
 
 // Enable offline persistence
 db.enablePersistence()
     .then(() => console.log('✅ Offline mode enabled'))
     .catch(err => console.log('⚠️ Persistence error:', err.code));
 
-// ... rest of the file stays the same
 // ============================================
 // COLLECTION REFERENCES
 // ============================================
@@ -79,7 +77,6 @@ function getIPHash() {
 function verifyPassword(inputPassword, role) {
     return settingsRef.doc('app').get().then(doc => {
         if (!doc.exists) {
-            // First time setup - create default passwords
             return settingsRef.doc('app').set({
                 passwordManager: hashPassword('admin123'),
                 passwordSeller: hashPassword('seller123'),
@@ -87,10 +84,12 @@ function verifyPassword(inputPassword, role) {
                 businessAddress: '',
                 businessPhone: '',
                 businessEmail: '',
+                receiptFooter: 'Thank you for your business!',
                 nguniaDefault: 1000,
                 lowStockThreshold: 100,
                 maxDiscount: 5000,
                 sessionTimeout: 30,
+                maxAttempts: 5,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             }).then(() => {
                 logAudit('SYSTEM_INIT', 'Default settings created');
@@ -230,10 +229,10 @@ function getProductsRealtime(callback) {
             callback(products);
         }, error => {
             console.error('Products realtime error:', error);
-            // Return empty array on error
             callback([]);
         });
 }
+
 function updateStock(productId, newStockValue, reason, notes, userName, userId, uom) {
     return productsRef.doc(productId).get()
         .then(productDoc => {
@@ -250,11 +249,9 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
             let quantityUnit = '';
             let logData = {};
             
-            // Determine which stock field to update based on UOM
             switch(productUom) {
                 case 'kg':
                     oldStock = productData.currentStockKg || 0;
-                    newStock = newStockValue;
                     updateData.currentStockKg = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'kg';
@@ -268,9 +265,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'bags':
                     oldStock = productData.currentStockCount || 0;
-                    newStock = newStockValue;
                     updateData.currentStockCount = newStock;
-                    // Also update kg equivalent
                     const kgPerBag = productData.kgPerBag || 50;
                     updateData.currentStockKg = newStock * kgPerBag;
                     quantityChanged = newStock - oldStock;
@@ -285,7 +280,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'litres':
                     oldStock = productData.currentStockLitres || 0;
-                    newStock = newStockValue;
                     updateData.currentStockLitres = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'litres';
@@ -298,7 +292,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'ml':
                     oldStock = productData.currentStockMl || 0;
-                    newStock = newStockValue;
                     updateData.currentStockMl = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'mL';
@@ -311,7 +304,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'pieces':
                     oldStock = productData.currentStockCount || 0;
-                    newStock = newStockValue;
                     updateData.currentStockCount = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'pieces';
@@ -324,7 +316,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'grams':
                     oldStock = productData.currentStockGrams || 0;
-                    newStock = newStockValue;
                     updateData.currentStockGrams = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'grams';
@@ -337,7 +328,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'sachets':
                     oldStock = productData.currentStockCount || 0;
-                    newStock = newStockValue;
                     updateData.currentStockCount = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'sachets';
@@ -350,9 +340,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'cartons':
                     oldStock = productData.currentStockCount || 0;
-                    newStock = newStockValue;
                     updateData.currentStockCount = newStock;
-                    // Also update pieces equivalent
                     const itemsPerCarton = productData.itemsPerCarton || 12;
                     updateData.currentStockPieces = newStock * itemsPerCarton;
                     quantityChanged = newStock - oldStock;
@@ -367,7 +355,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'rolls':
                     oldStock = productData.currentStockCount || 0;
-                    newStock = newStockValue;
                     updateData.currentStockCount = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'rolls';
@@ -380,7 +367,6 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     
                 case 'metres':
                     oldStock = productData.currentStockMetres || 0;
-                    newStock = newStockValue;
                     updateData.currentStockMetres = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'metres';
@@ -392,9 +378,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     break;
                     
                 default:
-                    // Fallback to kg
                     oldStock = productData.currentStockKg || 0;
-                    newStock = newStockValue;
                     updateData.currentStockKg = newStock;
                     quantityChanged = newStock - oldStock;
                     quantityUnit = 'kg';
@@ -405,9 +389,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
                     };
             }
             
-            // Update product stock
             return productsRef.doc(productId).update(updateData).then(() => {
-                // Log the stock movement
                 return stockLogRef.add({
                     productId: productId,
                     productName: productData.name,
@@ -432,13 +414,14 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
             return { success: false, message: error.message };
         });
 }
+
 // ============================================
 // SALE FUNCTIONS
-// ============================================function completeSale(saleData) {
+// ============================================
+function completeSale(saleData) {
     const batch = db.batch();
     const saleRef = salesRef.doc();
     
-    // Generate receipt number
     const date = new Date();
     const receiptNumber = 'BSH-' + date.getFullYear() + 
                           String(date.getMonth() + 1).padStart(2, '0') +
@@ -460,7 +443,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
     
     batch.set(saleRef, sale);
     
-    // Deduct stock for each item based on UOM
+    // Deduct stock based on UOM
     saleData.items.forEach(item => {
         const productRef = productsRef.doc(item.productId);
         const uom = item.uom || 'kg';
@@ -468,71 +451,44 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
         
         switch(uom) {
             case 'kg':
-                // Deduct kg from stock
                 batch.update(productRef, {
                     currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty * 1000))
                 });
                 break;
-                
             case 'bags':
-                // Deduct bag count
                 batch.update(productRef, {
                     currentStockCount: firebase.firestore.FieldValue.increment(-qty),
                     currentStockKg: firebase.firestore.FieldValue.increment(-(qty * (item.kgPerBag || 50)))
                 });
                 break;
-                
             case 'litres':
-                batch.update(productRef, {
-                    currentStockLitres: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockLitres: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'ml':
-                batch.update(productRef, {
-                    currentStockMl: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockMl: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'pieces':
-                batch.update(productRef, {
-                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'grams':
-                batch.update(productRef, {
-                    currentStockGrams: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockGrams: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'sachets':
-                batch.update(productRef, {
-                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'cartons':
                 batch.update(productRef, {
                     currentStockCount: firebase.firestore.FieldValue.increment(-qty),
                     currentStockPieces: firebase.firestore.FieldValue.increment(-(qty * (item.itemsPerCarton || 12)))
                 });
                 break;
-                
             case 'rolls':
-                batch.update(productRef, {
-                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             case 'metres':
-                batch.update(productRef, {
-                    currentStockMetres: firebase.firestore.FieldValue.increment(-qty)
-                });
+                batch.update(productRef, { currentStockMetres: firebase.firestore.FieldValue.increment(-qty) });
                 break;
-                
             default:
-                // Fallback to kg
                 batch.update(productRef, {
                     currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty))
                 });
@@ -541,7 +497,7 @@ function updateStock(productId, newStockValue, reason, notes, userName, userId, 
     
     return batch.commit()
         .then(() => {
-            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total} (${saleData.items.length} items)`);
+            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total}`);
             return { success: true, receiptNumber, saleId: saleRef.id };
         })
         .catch(error => {
@@ -654,7 +610,7 @@ function showConfirm(message) {
 // EXPORT FOR OTHER SCRIPTS
 // ============================================
 window.BashanPOS = {
-    db, 
+    db,
     productsRef, categoriesRef, salesRef, stockLogRef, settingsRef, auditLogRef,
     verifyPassword, updatePassword, checkAuth, logout, saveSession,
     getProducts, getProductsRealtime, updateStock, completeSale,
