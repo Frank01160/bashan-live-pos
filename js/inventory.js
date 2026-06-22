@@ -16,7 +16,6 @@ class InventorySystem {
     }
     
     async init() {
-        // Check if BashanPOS is loaded
         if (!window.BashanPOS) {
             console.error('❌ BashanPOS not loaded. Retrying...');
             setTimeout(() => this.init(), 500);
@@ -26,7 +25,6 @@ class InventorySystem {
         this.user = BashanPOS.checkAuth();
         if (!this.user) return;
         
-        // Only managers can access full inventory
         if (this.user.role !== 'manager') {
             BashanPOS.showNotification('Only managers can access inventory management', 'warning');
             setTimeout(() => window.location.href = 'pos.html', 2000);
@@ -46,55 +44,52 @@ class InventorySystem {
     }
     
     setupUI() {
-        document.getElementById('userName').textContent = this.user.name;
-        document.getElementById('userRole').textContent = this.user.role;
+        const userName = document.getElementById('userName');
+        const userRole = document.getElementById('userRole');
+        if (userName) userName.textContent = this.user.name;
+        if (userRole) userRole.textContent = this.user.role;
     }
     
     setupEventListeners() {
-        // Search and filters
-        document.getElementById('searchInventory').addEventListener('input', () => this.renderTable());
-        document.getElementById('filterCategory').addEventListener('change', () => this.renderTable());
-        document.getElementById('filterStatus').addEventListener('change', () => this.renderTable());
+        const bind = (id, event, handler) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(event, handler);
+        };
         
-        // Export
-        document.getElementById('exportInventoryBtn').addEventListener('click', () => this.exportInventory());
-        //for item type
+        bind('searchInventory', 'input', () => this.renderTable());
+        bind('filterCategory', 'change', () => this.renderTable());
+        bind('filterStatus', 'change', () => this.renderTable());
+        bind('exportInventoryBtn', 'click', () => this.exportInventory());
+        bind('closeAdjustModal', 'click', () => this.closeAdjustModal());
+        bind('cancelAdjustBtn', 'click', () => this.closeAdjustModal());
+        bind('addTab', 'click', () => this.setAdjustmentType('add'));
+        bind('removeTab', 'click', () => this.setAdjustmentType('remove'));
+        bind('adjNgunias', 'input', () => this.calculateAdjustment());
+        bind('adjKg', 'input', () => this.calculateAdjustment());
+        bind('confirmAdjustBtn', 'click', () => this.confirmAdjustment());
+        bind('confirmRemoveBtn', 'click', () => this.confirmAdjustment());
+        bind('historyBtn', 'click', () => this.openHistory());
+        bind('closeHistoryModal', 'click', () => this.closeHistory());
+        bind('historyProduct', 'change', () => this.loadHistory());
+        bind('historyType', 'change', () => this.loadHistory());
+        bind('exportHistoryBtn', 'click', () => this.exportHistory());
+        bind('addProductBtn', 'click', () => this.openAddProduct());
+        bind('closeProductModal', 'click', () => this.closeProductModal());
+        bind('cancelProductBtn', 'click', () => this.closeProductModal());
+        bind('saveProductBtn', 'click', () => this.saveProduct());
+        bind('logoutBtn', 'click', () => BashanPOS.logout());
+        
+        const adjReason = document.getElementById('adjReason');
+        if (adjReason) {
+            adjReason.addEventListener('change', (e) => {
+                const otherGroup = document.getElementById('otherReasonGroup');
+                if (otherGroup) otherGroup.style.display = e.target.value === 'Other' ? 'block' : 'none';
+            });
+        }
+        
         this.setupStockInputListeners();
-
-        
-        // Adjustment modal
-        document.getElementById('closeAdjustModal').addEventListener('click', () => this.closeAdjustModal());
-        document.getElementById('cancelAdjustBtn').addEventListener('click', () => this.closeAdjustModal());
-        document.getElementById('addTab').addEventListener('click', () => this.setAdjustmentType('add'));
-        document.getElementById('removeTab').addEventListener('click', () => this.setAdjustmentType('remove'));
-        document.getElementById('adjNgunias').addEventListener('input', () => this.calculateAdjustment());
-        document.getElementById('adjKg').addEventListener('input', () => this.calculateAdjustment());
-        document.getElementById('adjReason').addEventListener('change', (e) => {
-            document.getElementById('otherReasonGroup').style.display = e.target.value === 'Other' ? 'block' : 'none';
-        });
-        document.getElementById('confirmAdjustBtn').addEventListener('click', () => this.confirmAdjustment());
-        document.getElementById('confirmRemoveBtn').addEventListener('click', () => this.confirmAdjustment());
-        
-        // History modal
-        document.getElementById('historyBtn').addEventListener('click', () => this.openHistory());
-        document.getElementById('closeHistoryModal').addEventListener('click', () => this.closeHistory());
-        document.getElementById('historyProduct').addEventListener('change', () => this.loadHistory());
-        document.getElementById('historyType').addEventListener('change', () => this.loadHistory());
-        document.getElementById('exportHistoryBtn').addEventListener('click', () => this.exportHistory());
-        
-        // Add product modal
-        document.getElementById('addProductBtn').addEventListener('click', () => this.openAddProduct());
-        document.getElementById('closeProductModal').addEventListener('click', () => this.closeProductModal());
-        document.getElementById('cancelProductBtn').addEventListener('click', () => this.closeProductModal());
-        document.getElementById('saveProductBtn').addEventListener('click', () => this.saveProduct());
-        
-        // Make category dropdown searchable/typeable
         this.setupCategoryDropdown();
         
-        // Logout
-        document.getElementById('logoutBtn').addEventListener('click', () => BashanPOS.logout());
-        
-        // Close modals on overlay click
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
             overlay.addEventListener('click', (e) => {
                 if (e.target === e.currentTarget) {
@@ -103,7 +98,6 @@ class InventorySystem {
             });
         });
         
-        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
@@ -117,10 +111,8 @@ class InventorySystem {
             const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
             
             if (snapshot.empty) {
-                // No categories exist - create defaults
                 console.log('📝 Creating default categories...');
                 await this.createDefaultCategories();
-                // Reload
                 const newSnapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
                 this.processCategories(newSnapshot);
             } else {
@@ -131,7 +123,6 @@ class InventorySystem {
             console.log('✅ Categories loaded:', this.categories.length);
         } catch (error) {
             console.error('❌ Load categories error:', error);
-            // Try to create defaults on error
             await this.createDefaultCategories();
             const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
             this.processCategories(snapshot);
@@ -158,7 +149,6 @@ class InventorySystem {
         ];
         
         const batch = BashanPOS.db.batch();
-        
         defaults.forEach(cat => {
             const ref = BashanPOS.categoriesRef.doc();
             batch.set(ref, {
@@ -174,16 +164,10 @@ class InventorySystem {
     
     setupCategoryDropdown() {
         const productCategory = document.getElementById('productCategory');
+        if (!productCategory) return;
         
-        // Make it so user can type custom category or select from list
         productCategory.addEventListener('change', (e) => {
             const value = e.target.value;
-            
-            // If user typed something that's not in the list, ask if they want to add it
-            if (value && value !== '__add_new__' && !this.categories.find(c => c.id === value || c.name === value)) {
-                // User typed a custom category
-                this.addCustomCategory(value);
-            }
             
             if (value === '__add_new__') {
                 const newCat = prompt('Enter new category name:');
@@ -198,33 +182,31 @@ class InventorySystem {
     
     async addCustomCategory(categoryName) {
         try {
-            // Check if category already exists
             const exists = this.categories.find(c => 
                 c.name.toLowerCase() === categoryName.toLowerCase()
             );
             
             if (exists) {
-                document.getElementById('productCategory').value = exists.id;
+                const productCategory = document.getElementById('productCategory');
+                if (productCategory) productCategory.value = exists.id;
                 return;
             }
             
-            // Add new category
             const docRef = await BashanPOS.categoriesRef.add({
                 name: categoryName,
                 displayOrder: this.categories.length,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             
-            // Reload categories
             const snapshot = await BashanPOS.categoriesRef.orderBy('displayOrder').get();
             this.processCategories(snapshot);
             this.populateCategoryDropdowns();
             
-            // Set the new category as selected
-            document.getElementById('productCategory').value = docRef.id;
+            const productCategory = document.getElementById('productCategory');
+            if (productCategory) productCategory.value = docRef.id;
             
-            BashanPOS.showNotification(`Category "${categoryName}" added!`, 'success');
-            BashanPOS.logAudit('CATEGORY_ADD', `Added category: ${categoryName}`);
+            BashanPOS.showNotification('Category "' + categoryName + '" added!', 'success');
+            BashanPOS.logAudit('CATEGORY_ADD', 'Added category: ' + categoryName);
         } catch (error) {
             console.error('Add category error:', error);
             BashanPOS.showNotification('Failed to add category', 'error');
@@ -236,25 +218,25 @@ class InventorySystem {
         const productSelect = document.getElementById('productCategory');
         const historySelect = document.getElementById('historyProduct');
         
-        // Populate filter dropdown
-        filterSelect.innerHTML = '<option value="all">All Categories</option>';
-        this.categories.forEach(cat => {
-            filterSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
-        });
+        if (filterSelect) {
+            filterSelect.innerHTML = '<option value="all">All Categories</option>';
+            this.categories.forEach(cat => {
+                filterSelect.innerHTML += '<option value="' + cat.id + '">' + cat.name + '</option>';
+            });
+        }
         
-        // Populate product form dropdown - NOW WITH TYPEABLE OPTION
-        productSelect.innerHTML = '<option value="">Select or type category...</option>';
-        this.categories.forEach(cat => {
-            productSelect.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
-        });
-        // Add "add new" option
-        productSelect.innerHTML += '<option value="__add_new__" style="color: #4caf50; font-style: italic;">+ Add New Category...</option>';
+        if (productSelect) {
+            productSelect.innerHTML = '<option value="">Select or type category...</option>';
+            this.categories.forEach(cat => {
+                productSelect.innerHTML += '<option value="' + cat.id + '">' + cat.name + '</option>';
+            });
+            productSelect.innerHTML += '<option value="__add_new__" style="color: #4caf50; font-style: italic;">+ Add New Category...</option>';
+        }
         
-        // Populate history product filter
         if (historySelect) {
             historySelect.innerHTML = '<option value="all">All Products</option>';
             this.products.forEach(p => {
-                historySelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+                historySelect.innerHTML += '<option value="' + p.id + '">' + p.name + '</option>';
             });
         }
     }
@@ -276,31 +258,41 @@ class InventorySystem {
             console.error('❌ Load products error:', error);
             BashanPOS.showNotification('Failed to load products', 'error');
             
-            // Show error in table
             const tbody = document.getElementById('inventoryTableBody');
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">
-                        <p>⚠️ Failed to load products</p>
-                        <p style="font-size:12px;color:var(--danger);">${error.message}</p>
-                        <button onclick="location.reload()" class="outline-btn" style="margin-top:10px;">🔄 Retry</button>
-                    </td>
-                </tr>
-            `;
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);"><p>⚠️ Failed to load products</p><p style="font-size:12px;color:var(--danger);">' + error.message + '</p><button onclick="location.reload()" class="outline-btn" style="margin-top:10px;">🔄 Retry</button></td></tr>';
+            }
+        }
+    }
+    
+    getStockValue(product) {
+        const uom = product.uom || 'kg';
+        switch(uom) {
+            case 'kg': return product.currentStockKg || 0;
+            case 'bags': return product.currentStockCount || 0;
+            case 'litres': return product.currentStockLitres || 0;
+            case 'ml': return product.currentStockMl || 0;
+            case 'pieces': return product.currentStockCount || 0;
+            case 'grams': return product.currentStockGrams || 0;
+            case 'sachets': return product.currentStockCount || 0;
+            case 'cartons': return product.currentStockCount || 0;
+            case 'rolls': return product.currentStockCount || 0;
+            case 'metres': return product.currentStockMetres || 0;
+            default: return product.currentStockKg || 0;
         }
     }
     
     getFilteredProducts() {
-        const searchTerm = document.getElementById('searchInventory').value.toLowerCase();
-        const categoryFilter = document.getElementById('filterCategory').value;
-        const statusFilter = document.getElementById('filterStatus').value;
+        const searchTerm = (document.getElementById('searchInventory')?.value || '').toLowerCase();
+        const categoryFilter = document.getElementById('filterCategory')?.value || 'all';
+        const statusFilter = document.getElementById('filterStatus')?.value || 'all';
         
         return this.products.filter(product => {
             const matchesSearch = !searchTerm || 
                 (product.name && product.name.toLowerCase().includes(searchTerm));
             const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
             
-            const stock = product.currentStockKg || 0;
+            const stock = this.getStockValue(product);
             const threshold = product.lowStockThreshold || 100;
             
             let matchesStatus = true;
@@ -319,22 +311,15 @@ class InventorySystem {
     renderTable() {
         const filtered = this.getFilteredProducts();
         const tbody = document.getElementById('inventoryTableBody');
+        if (!tbody) return;
         
         if (filtered.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">
-                        <p>📦 No products found</p>
-                        <p style="font-size:12px;">Try adjusting your filters or add a new product</p>
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);"><p>📦 No products found</p><p style="font-size:12px;">Try adjusting your filters or add a new product</p></td></tr>';
             return;
         }
         
         tbody.innerHTML = filtered.map(product => this.createTableRow(product)).join('');
         
-        // Add action handlers
         tbody.querySelectorAll('.action-btn.adjust').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const productId = e.target.closest('tr').dataset.productId;
@@ -356,309 +341,299 @@ class InventorySystem {
             });
         });
     }
+    
     createTableRow(product) {
-    const uom = product.uom || 'kg';
-    const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-    const threshold = product.lowStockThreshold || this.settings?.lowStockThreshold || 100;
-    
-    let stock = 0;
-    let stockDisplay = '';
-    let priceDisplay = '';
-    let status = '';
-    let statusClass = '';
-    let rowClass = '';
-    let stockBarClass = '';
-    let maxForBar = 100;
-    
-    switch(uom) {
-        case 'kg':
-            stock = product.currentStockKg || 0;
-            maxForBar = nguniaSize * 10;
-            stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
-            break;
-            
-        case 'bags':
-            stock = product.currentStockCount || 0;
-            maxForBar = 50;
-            stockDisplay = `${stock} bags (${product.kgPerBag || 50}kg each)`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerBag || 0)}/bag`;
-            break;
-            
-        case 'litres':
-            stock = product.currentStockLitres || 0;
-            maxForBar = 100;
-            stockDisplay = `${stock.toFixed(2)} litres`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerLitre || 0)}/L`;
-            break;
-            
-        case 'ml':
-            stock = product.currentStockMl || 0;
-            maxForBar = 5000;
-            stockDisplay = `${stock.toFixed(0)} mL`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePer100ml || 0)}/100mL`;
-            break;
-            
-        case 'pieces':
-            stock = product.currentStockCount || 0;
-            maxForBar = 100;
-            stockDisplay = `${stock} pieces`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerPiece || 0)}/pc`;
-            break;
-            
-        case 'grams':
-            stock = product.currentStockGrams || 0;
-            maxForBar = 5000;
-            stockDisplay = `${stock}g`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerGram || 0)}/g`;
-            break;
-            
-        case 'sachets':
-            stock = product.currentStockCount || 0;
-            maxForBar = 100;
-            stockDisplay = `${stock} sachets`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerSachet || 0)}/sachet`;
-            break;
-            
-        case 'cartons':
-            stock = product.currentStockCount || 0;
-            maxForBar = 20;
-            const itemsPerCarton = product.itemsPerCarton || 12;
-            stockDisplay = `${stock} cartons (${stock * itemsPerCarton} pcs)`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerCarton || 0)}/carton`;
-            break;
-            
-        case 'rolls':
-            stock = product.currentStockCount || 0;
-            maxForBar = 30;
-            stockDisplay = `${stock} rolls`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerRoll || 0)}/roll`;
-            break;
-            
-        case 'metres':
-            stock = product.currentStockMetres || 0;
-            maxForBar = 200;
-            stockDisplay = `${stock.toFixed(2)} metres`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerMetre || 0)}/m`;
-            break;
-            
-        default:
-            stock = product.currentStockKg || 0;
-            maxForBar = nguniaSize * 10;
-            stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
-    }
-    
-    // Determine status
-    if (stock <= 0) {
-        status = 'Out of Stock';
-        statusClass = 'out-of-stock';
-        rowClass = 'out-of-stock-row';
-        stockBarClass = 'low';
-    } else if (stock <= threshold) {
-        status = 'Low Stock';
-        statusClass = 'low-stock';
-        rowClass = 'low-stock-row';
-        stockBarClass = 'medium';
-    } else {
-        status = 'In Stock';
-        statusClass = 'in-stock';
-        rowClass = '';
-        stockBarClass = 'good';
-    }
-    
-    const stockPercentage = Math.min(100, Math.max(0, (stock / maxForBar) * 100));
-    const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'Uncategorized';
-    const uomBadge = `<span class="uom-badge-inline">${uom}</span>`;
-    
-    return `
-        <tr class="${rowClass}" data-product-id="${product.id}">
-            <td class="product-name-cell">${product.name || 'Unnamed'} ${uomBadge}</td>
-            <td>${categoryName}</td>
-            <td>${uom !== 'kg' ? '-' : (nguniaSize + ' kg')}</td>
-            <td class="stock-display">
-                ${stockDisplay}
-                <div class="stock-level-bar">
-                    <div class="stock-level-fill ${stockBarClass}" style="width:${stockPercentage}%"></div>
-                </div>
-            </td>
-            <td>${priceDisplay}</td>
-            <td><span class="status-badge ${statusClass}">${status}</span></td>
-            <td>
-                <div class="action-btns">
-                    <button class="action-btn adjust">📦 Adjust</button>
-                    <button class="action-btn edit">✏️ Edit</button>
-                    <button class="action-btn archive">🗑️ Archive</button>
-                </div>
-            </td>
-        </tr>
-    `;
-}
-    loadStats() {
-    const threshold = this.settings?.lowStockThreshold || 100;
-    
-    const totalProducts = this.products.length;
-    
-    // Count low stock and out of stock based on UOM
-    let lowStock = 0;
-    let outOfStock = 0;
-    let totalValue = 0;
-    
-    this.products.forEach(p => {
-        const uom = p.uom || 'kg';
+        const uom = product.uom || 'kg';
+        const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+        const threshold = product.lowStockThreshold || this.settings?.lowStockThreshold || 100;
+        
         let stock = 0;
-        let value = 0;
-        let productThreshold = p.lowStockThreshold || threshold;
+        let stockDisplay = '';
+        let priceDisplay = '';
+        let maxForBar = 100;
         
         switch(uom) {
             case 'kg':
-                stock = p.currentStockKg || 0;
-                value = stock * (p.pricePerKg || 0);
+                stock = product.currentStockKg || 0;
+                maxForBar = nguniaSize * 10;
+                stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerKg || 0) + '/kg';
                 break;
             case 'bags':
-                stock = p.currentStockCount || 0;
-                value = stock * (p.pricePerBag || 0);
+                stock = product.currentStockCount || 0;
+                maxForBar = 50;
+                stockDisplay = stock + ' bags (' + (product.kgPerBag || 50) + 'kg each)';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerBag || 0) + '/bag';
                 break;
             case 'litres':
-                stock = p.currentStockLitres || 0;
-                value = stock * (p.pricePerLitre || 0);
+                stock = product.currentStockLitres || 0;
+                maxForBar = 100;
+                stockDisplay = stock.toFixed(2) + ' litres';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerLitre || 0) + '/L';
                 break;
             case 'ml':
-                stock = p.currentStockMl || 0;
-                value = stock * (p.pricePer100ml || 0);
+                stock = product.currentStockMl || 0;
+                maxForBar = 5000;
+                stockDisplay = stock.toFixed(0) + ' mL';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePer100ml || 0) + '/100mL';
                 break;
             case 'pieces':
-                stock = p.currentStockCount || 0;
-                value = stock * (p.pricePerPiece || 0);
+                stock = product.currentStockCount || 0;
+                maxForBar = 100;
+                stockDisplay = stock + ' pieces';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerPiece || 0) + '/pc';
                 break;
             case 'grams':
-                stock = p.currentStockGrams || 0;
-                value = stock * (p.pricePerGram || 0);
+                stock = product.currentStockGrams || 0;
+                maxForBar = 5000;
+                stockDisplay = stock + 'g';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerGram || 0) + '/g';
                 break;
             case 'sachets':
-                stock = p.currentStockCount || 0;
-                value = stock * (p.pricePerSachet || 0);
+                stock = product.currentStockCount || 0;
+                maxForBar = 100;
+                stockDisplay = stock + ' sachets';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerSachet || 0) + '/sachet';
                 break;
             case 'cartons':
-                stock = p.currentStockCount || 0;
-                value = stock * (p.pricePerCarton || 0);
+                stock = product.currentStockCount || 0;
+                maxForBar = 20;
+                const ipc = product.itemsPerCarton || 12;
+                stockDisplay = stock + ' cartons (' + (stock * ipc) + ' pcs)';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerCarton || 0) + '/carton';
                 break;
             case 'rolls':
-                stock = p.currentStockCount || 0;
-                value = stock * (p.pricePerRoll || 0);
+                stock = product.currentStockCount || 0;
+                maxForBar = 30;
+                stockDisplay = stock + ' rolls';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerRoll || 0) + '/roll';
                 break;
             case 'metres':
-                stock = p.currentStockMetres || 0;
-                value = stock * (p.pricePerMetre || 0);
+                stock = product.currentStockMetres || 0;
+                maxForBar = 200;
+                stockDisplay = stock.toFixed(2) + ' metres';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerMetre || 0) + '/m';
                 break;
             default:
-                stock = p.currentStockKg || 0;
-                value = stock * (p.pricePerKg || 0);
+                stock = product.currentStockKg || 0;
+                maxForBar = nguniaSize * 10;
+                stockDisplay = BashanPOS.formatStock(stock, nguniaSize);
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerKg || 0) + '/kg';
         }
         
-        if (stock <= 0) outOfStock++;
-        else if (stock <= productThreshold) lowStock++;
+        let status, statusClass, rowClass, stockBarClass;
+        if (stock <= 0) {
+            status = 'Out of Stock';
+            statusClass = 'out-of-stock';
+            rowClass = 'out-of-stock-row';
+            stockBarClass = 'low';
+        } else if (stock <= threshold) {
+            status = 'Low Stock';
+            statusClass = 'low-stock';
+            rowClass = 'low-stock-row';
+            stockBarClass = 'medium';
+        } else {
+            status = 'In Stock';
+            statusClass = 'in-stock';
+            rowClass = '';
+            stockBarClass = 'good';
+        }
         
-        totalValue += value;
-    });
-    
-    document.getElementById('totalProducts').textContent = totalProducts;
-    document.getElementById('lowStockCount').textContent = lowStock;
-    document.getElementById('outOfStockCount').textContent = outOfStock;
-    document.getElementById('totalValue').textContent = BashanPOS.formatCurrency(totalValue);
-}
-    
-    // ============ STOCK ADJUSTMENT ============openAdjustModal(productId) {
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-    
-    this.currentAdjustProduct = product;
-    this.adjustmentType = 'add';
-    
-    const uom = product.uom || 'kg';
-    let stockDisplay = '';
-    let priceDisplay = '';
-    
-    switch(uom) {
-        case 'kg':
-            stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
-            break;
-        case 'bags':
-            stockDisplay = `${product.currentStockCount || 0} bags`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerBag || 0)}/bag`;
-            break;
-        case 'litres':
-            stockDisplay = `${(product.currentStockLitres || 0).toFixed(2)} L`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerLitre || 0)}/L`;
-            break;
-        case 'ml':
-            stockDisplay = `${(product.currentStockMl || 0).toFixed(0)} mL`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePer100ml || 0)}/100mL`;
-            break;
-        case 'pieces':
-            stockDisplay = `${product.currentStockCount || 0} pieces`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerPiece || 0)}/pc`;
-            break;
-        case 'grams':
-            stockDisplay = `${product.currentStockGrams || 0}g`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerGram || 0)}/g`;
-            break;
-        case 'sachets':
-            stockDisplay = `${product.currentStockCount || 0} sachets`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerSachet || 0)}/sachet`;
-            break;
-        case 'cartons':
-            stockDisplay = `${product.currentStockCount || 0} cartons`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerCarton || 0)}/carton`;
-            break;
-        case 'rolls':
-            stockDisplay = `${product.currentStockCount || 0} rolls`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerRoll || 0)}/roll`;
-            break;
-        case 'metres':
-            stockDisplay = `${(product.currentStockMetres || 0).toFixed(2)} m`;
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerMetre || 0)}/m`;
-            break;
-        default:
-            stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, 1000);
-            priceDisplay = `${BashanPOS.formatCurrency(product.pricePerKg || 0)}/kg`;
+        const stockPercentage = Math.min(100, Math.max(0, (stock / maxForBar) * 100));
+        const categoryName = this.categories.find(c => c.id === product.category)?.name || product.category || 'Uncategorized';
+        const uomBadge = '<span class="uom-badge-inline">' + uom + '</span>';
+        
+        return '<tr class="' + rowClass + '" data-product-id="' + product.id + '">' +
+            '<td class="product-name-cell">' + (product.name || 'Unnamed') + ' ' + uomBadge + '</td>' +
+            '<td>' + categoryName + '</td>' +
+            '<td>' + (uom !== 'kg' ? '-' : (nguniaSize + ' kg')) + '</td>' +
+            '<td class="stock-display">' + stockDisplay +
+                '<div class="stock-level-bar"><div class="stock-level-fill ' + stockBarClass + '" style="width:' + stockPercentage + '%"></div></div>' +
+            '</td>' +
+            '<td>' + priceDisplay + '</td>' +
+            '<td><span class="status-badge ' + statusClass + '">' + status + '</span></td>' +
+            '<td><div class="action-btns">' +
+                '<button class="action-btn adjust">📦 Adjust</button>' +
+                '<button class="action-btn edit">✏️ Edit</button>' +
+                '<button class="action-btn archive">🗑️ Archive</button>' +
+            '</div></td>' +
+        '</tr>';
     }
     
-    document.getElementById('adjustModalTitle').textContent = `Adjust Stock - ${product.name}`;
-    document.getElementById('adjustProductInfo').innerHTML = `
-        <div class="product-name-lg">${product.name} <span class="uom-badge-inline">${uom}</span></div>
-        <div class="product-meta">
-            <span>Current: ${stockDisplay}</span>
-            <span>Price: ${priceDisplay}</span>
-        </div>
-    `;
-    document.getElementById('currentStockDisplay').textContent = stockDisplay;
+    loadStats() {
+        const threshold = this.settings?.lowStockThreshold || 100;
+        const totalProducts = this.products.length;
+        
+        let lowStock = 0;
+        let outOfStock = 0;
+        let totalValue = 0;
+        
+        this.products.forEach(p => {
+            const uom = p.uom || 'kg';
+            let stock = 0;
+            let value = 0;
+            const productThreshold = p.lowStockThreshold || threshold;
+            
+            switch(uom) {
+                case 'kg':
+                    stock = p.currentStockKg || 0;
+                    value = stock * (p.pricePerKg || 0);
+                    break;
+                case 'bags':
+                    stock = p.currentStockCount || 0;
+                    value = stock * (p.pricePerBag || 0);
+                    break;
+                case 'litres':
+                    stock = p.currentStockLitres || 0;
+                    value = stock * (p.pricePerLitre || 0);
+                    break;
+                case 'ml':
+                    stock = p.currentStockMl || 0;
+                    value = stock * (p.pricePer100ml || 0);
+                    break;
+                case 'pieces':
+                    stock = p.currentStockCount || 0;
+                    value = stock * (p.pricePerPiece || 0);
+                    break;
+                case 'grams':
+                    stock = p.currentStockGrams || 0;
+                    value = stock * (p.pricePerGram || 0);
+                    break;
+                case 'sachets':
+                    stock = p.currentStockCount || 0;
+                    value = stock * (p.pricePerSachet || 0);
+                    break;
+                case 'cartons':
+                    stock = p.currentStockCount || 0;
+                    value = stock * (p.pricePerCarton || 0);
+                    break;
+                case 'rolls':
+                    stock = p.currentStockCount || 0;
+                    value = stock * (p.pricePerRoll || 0);
+                    break;
+                case 'metres':
+                    stock = p.currentStockMetres || 0;
+                    value = stock * (p.pricePerMetre || 0);
+                    break;
+                default:
+                    stock = p.currentStockKg || 0;
+                    value = stock * (p.pricePerKg || 0);
+            }
+            
+            if (stock <= 0) outOfStock++;
+            else if (stock <= productThreshold) lowStock++;
+            
+            totalValue += value;
+        });
+        
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('totalProducts', totalProducts);
+        setText('lowStockCount', lowStock);
+        setText('outOfStockCount', outOfStock);
+        setText('totalValue', BashanPOS.formatCurrency(totalValue));
+    }
     
-    // Reset form
-    document.getElementById('adjNgunias').value = '0';
-    document.getElementById('adjKg').value = '0';
-    document.getElementById('adjReason').value = '';
-    document.getElementById('adjOtherReason').value = '';
-    document.getElementById('adjNotes').value = '';
-    document.getElementById('adjTotalDisplay').textContent = '0';
-    document.getElementById('newStockDisplay').textContent = stockDisplay;
-    document.getElementById('otherReasonGroup').style.display = 'none';
-    
-    this.setAdjustmentType('add');
-    
-    document.getElementById('adjustStockModal').classList.add('active');
-}
+    // ============ STOCK ADJUSTMENT ============
+    openAdjustModal(productId) {
+        const product = this.products.find(p => p.id === productId);
+        if (!product) return;
+        
+        this.currentAdjustProduct = product;
+        this.adjustmentType = 'add';
+        
+        const uom = product.uom || 'kg';
+        let stockDisplay = '';
+        let priceDisplay = '';
+        
+        switch(uom) {
+            case 'kg':
+                stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, product.nguniaKg || 1000);
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerKg || 0) + '/kg';
+                break;
+            case 'bags':
+                stockDisplay = (product.currentStockCount || 0) + ' bags';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerBag || 0) + '/bag';
+                break;
+            case 'litres':
+                stockDisplay = (product.currentStockLitres || 0).toFixed(2) + ' L';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerLitre || 0) + '/L';
+                break;
+            case 'ml':
+                stockDisplay = (product.currentStockMl || 0).toFixed(0) + ' mL';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePer100ml || 0) + '/100mL';
+                break;
+            case 'pieces':
+                stockDisplay = (product.currentStockCount || 0) + ' pieces';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerPiece || 0) + '/pc';
+                break;
+            case 'grams':
+                stockDisplay = (product.currentStockGrams || 0) + 'g';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerGram || 0) + '/g';
+                break;
+            case 'sachets':
+                stockDisplay = (product.currentStockCount || 0) + ' sachets';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerSachet || 0) + '/sachet';
+                break;
+            case 'cartons':
+                stockDisplay = (product.currentStockCount || 0) + ' cartons';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerCarton || 0) + '/carton';
+                break;
+            case 'rolls':
+                stockDisplay = (product.currentStockCount || 0) + ' rolls';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerRoll || 0) + '/roll';
+                break;
+            case 'metres':
+                stockDisplay = (product.currentStockMetres || 0).toFixed(2) + ' m';
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerMetre || 0) + '/m';
+                break;
+            default:
+                stockDisplay = BashanPOS.formatStock(product.currentStockKg || 0, 1000);
+                priceDisplay = BashanPOS.formatCurrency(product.pricePerKg || 0) + '/kg';
+        }
+        
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('adjustModalTitle', 'Adjust Stock - ' + product.name);
+        
+        const infoEl = document.getElementById('adjustProductInfo');
+        if (infoEl) {
+            infoEl.innerHTML = '<div class="product-name-lg">' + product.name + ' <span class="uom-badge-inline">' + uom + '</span></div>' +
+                '<div class="product-meta"><span>Current: ' + stockDisplay + '</span><span>Price: ' + priceDisplay + '</span></div>';
+        }
+        
+        setText('currentStockDisplay', stockDisplay);
+        
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setVal('adjNgunias', '0');
+        setVal('adjKg', '0');
+        setVal('adjReason', '');
+        setVal('adjOtherReason', '');
+        setVal('adjNotes', '');
+        setText('adjTotalDisplay', '0');
+        setText('newStockDisplay', stockDisplay);
+        
+        const otherGroup = document.getElementById('otherReasonGroup');
+        if (otherGroup) otherGroup.style.display = 'none';
+        
+        this.setAdjustmentType('add');
+        
+        const modal = document.getElementById('adjustStockModal');
+        if (modal) modal.classList.add('active');
+    }
     
     setAdjustmentType(type) {
         this.adjustmentType = type;
         
-        document.getElementById('addTab').classList.toggle('active', type === 'add');
-        document.getElementById('removeTab').classList.toggle('active', type === 'remove');
+        const addTab = document.getElementById('addTab');
+        const removeTab = document.getElementById('removeTab');
+        const confirmAdd = document.getElementById('confirmAdjustBtn');
+        const confirmRemove = document.getElementById('confirmRemoveBtn');
+        const typeText = document.getElementById('adjTypeText');
         
-        document.getElementById('adjTypeText').textContent = type === 'add' ? 'add' : 'remove';
-        document.getElementById('confirmAdjustBtn').style.display = type === 'add' ? 'inline-flex' : 'none';
-        document.getElementById('confirmRemoveBtn').style.display = type === 'remove' ? 'inline-flex' : 'none';
+        if (addTab) addTab.classList.toggle('active', type === 'add');
+        if (removeTab) removeTab.classList.toggle('active', type === 'remove');
+        if (confirmAdd) confirmAdd.style.display = type === 'add' ? 'inline-flex' : 'none';
+        if (confirmRemove) confirmRemove.style.display = type === 'remove' ? 'inline-flex' : 'none';
+        if (typeText) typeText.textContent = type === 'add' ? 'add' : 'remove';
         
         this.calculateAdjustment();
     }
@@ -667,514 +642,529 @@ class InventorySystem {
         if (!this.currentAdjustProduct) return;
         
         const nguniaSize = this.currentAdjustProduct.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const ngunias = parseFloat(document.getElementById('adjNgunias').value) || 0;
-        const kg = parseFloat(document.getElementById('adjKg').value) || 0;
+        const ngunias = parseFloat(document.getElementById('adjNgunias')?.value) || 0;
+        const kg = parseFloat(document.getElementById('adjKg')?.value) || 0;
         const totalKg = (ngunias * nguniaSize) + kg;
         
-        document.getElementById('adjTotalDisplay').textContent = 
-            `${totalKg.toFixed(2)} kg (${(totalKg / nguniaSize).toFixed(3)} ngunias)`;
+        const totalDisplay = document.getElementById('adjTotalDisplay');
+        if (totalDisplay) {
+            totalDisplay.textContent = totalKg.toFixed(2) + ' kg (' + (totalKg / nguniaSize).toFixed(3) + ' ngunias)';
+        }
         
         const currentStock = this.currentAdjustProduct.currentStockKg || 0;
         const newStock = this.adjustmentType === 'add' ? currentStock + totalKg : currentStock - totalKg;
-        document.getElementById('newStockDisplay').textContent = 
-            BashanPOS.formatStock(Math.max(0, newStock), nguniaSize);
+        
+        const newStockDisplay = document.getElementById('newStockDisplay');
+        if (newStockDisplay) {
+            newStockDisplay.textContent = BashanPOS.formatStock(Math.max(0, newStock), nguniaSize);
+        }
     }
+    
     async confirmAdjustment() {
-    if (!this.currentAdjustProduct) return;
-    
-    const product = this.currentAdjustProduct;
-    const uom = product.uom || 'kg';
-    const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-    const ngunias = parseFloat(document.getElementById('adjNgunias').value) || 0;
-    const kg = parseFloat(document.getElementById('adjKg').value) || 0;
-    
-    let totalChange = 0;
-    let currentStock = 0;
-    let unitLabel = '';
-    
-    // Calculate based on UOM
-    switch(uom) {
-        case 'kg':
-            totalChange = (ngunias * nguniaSize) + kg;
-            currentStock = product.currentStockKg || 0;
-            unitLabel = 'kg';
-            break;
-        case 'bags':
-            totalChange = ngunias + kg; // ngunias field used as bags, kg as extra
-            currentStock = product.currentStockCount || 0;
-            unitLabel = 'bags';
-            break;
-        default:
-            // For non-kg UOMs, use the ngunias field as the main quantity
-            totalChange = ngunias + kg;
-            currentStock = this.getCurrentStockForUOM(product, uom);
-            unitLabel = uom;
+        if (!this.currentAdjustProduct) return;
+        
+        const product = this.currentAdjustProduct;
+        const uom = product.uom || 'kg';
+        const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
+        const ngunias = parseFloat(document.getElementById('adjNgunias')?.value) || 0;
+        const kg = parseFloat(document.getElementById('adjKg')?.value) || 0;
+        
+        let totalChange = 0;
+        let currentStock = 0;
+        let unitLabel = '';
+        
+        switch(uom) {
+            case 'kg':
+                totalChange = (ngunias * nguniaSize) + kg;
+                currentStock = product.currentStockKg || 0;
+                unitLabel = 'kg';
+                break;
+            case 'bags':
+                totalChange = ngunias + kg;
+                currentStock = product.currentStockCount || 0;
+                unitLabel = 'bags';
+                break;
+            default:
+                totalChange = ngunias + kg;
+                currentStock = this.getStockValue(product);
+                unitLabel = uom;
+        }
+        
+        if (totalChange <= 0) {
+            BashanPOS.showNotification('Please enter a quantity', 'warning');
+            return;
+        }
+        
+        if (this.adjustmentType === 'remove' && totalChange > currentStock) {
+            BashanPOS.showNotification('Cannot remove more than current stock (' + currentStock + ' ' + unitLabel + ')', 'error');
+            return;
+        }
+        
+        const reason = document.getElementById('adjReason')?.value || '';
+        const otherReason = document.getElementById('adjOtherReason')?.value || '';
+        
+        if (!reason) {
+            BashanPOS.showNotification('Please select a reason', 'warning');
+            return;
+        }
+        
+        const finalReason = reason === 'Other' ? otherReason : reason;
+        if (reason === 'Other' && !otherReason) {
+            BashanPOS.showNotification('Please specify the reason', 'warning');
+            return;
+        }
+        
+        const notes = document.getElementById('adjNotes')?.value || '';
+        const newStock = this.adjustmentType === 'add' ? currentStock + totalChange : currentStock - totalChange;
+        
+        const confirmed = await BashanPOS.showConfirm(
+            (this.adjustmentType === 'add' ? 'Add' : 'Remove') + ' ' + totalChange + ' ' + unitLabel + ' ' +
+            (this.adjustmentType === 'add' ? 'to' : 'from') + ' ' + product.name + '?\n\n' +
+            'Current: ' + currentStock + ' ' + unitLabel + '\n' +
+            'New: ' + newStock + ' ' + unitLabel + '\n\n' +
+            'Reason: ' + finalReason
+        );
+        
+        if (!confirmed) return;
+        
+        const result = await BashanPOS.updateStock(
+            product.id, newStock, finalReason, notes,
+            this.user.name, this.user.id, uom
+        );
+        
+        if (result.success) {
+            BashanPOS.showNotification('Stock adjusted successfully!', 'success');
+            this.closeAdjustModal();
+            await this.loadProducts();
+        } else {
+            BashanPOS.showNotification('Failed to adjust stock: ' + result.message, 'error');
+        }
     }
-    
-    if (totalChange <= 0) {
-        BashanPOS.showNotification('Please enter a quantity', 'warning');
-        return;
-    }
-    
-    if (this.adjustmentType === 'remove' && totalChange > currentStock) {
-        BashanPOS.showNotification(`Cannot remove more than current stock (${currentStock} ${unitLabel})`, 'error');
-        return;
-    }
-    
-    const reason = document.getElementById('adjReason').value;
-    const otherReason = document.getElementById('adjOtherReason').value;
-    
-    if (!reason) {
-        BashanPOS.showNotification('Please select a reason', 'warning');
-        return;
-    }
-    
-    const finalReason = reason === 'Other' ? otherReason : reason;
-    if (reason === 'Other' && !otherReason) {
-        BashanPOS.showNotification('Please specify the reason', 'warning');
-        return;
-    }
-    
-    const notes = document.getElementById('adjNotes').value;
-    const newStock = this.adjustmentType === 'add' 
-        ? currentStock + totalChange
-        : currentStock - totalChange;
-    
-    const confirmed = await BashanPOS.showConfirm(
-        `${this.adjustmentType === 'add' ? 'Add' : 'Remove'} ${totalChange} ${unitLabel} ` +
-        `${this.adjustmentType === 'add' ? 'to' : 'from'} ${product.name}?\n\n` +
-        `Current: ${currentStock} ${unitLabel}\n` +
-        `New: ${newStock} ${unitLabel}\n\n` +
-        `Reason: ${finalReason}`
-    );
-    
-    if (!confirmed) return;
-    
-    // Call updateStock with UOM
-    const result = await BashanPOS.updateStock(
-        product.id,
-        newStock,
-        finalReason,
-        notes,
-        this.user.name,
-        this.user.id,
-        uom  // Pass UOM
-    );
-    
-    if (result.success) {
-        BashanPOS.showNotification('Stock adjusted successfully!', 'success');
-        this.closeAdjustModal();
-        await this.loadProducts();
-    } else {
-        BashanPOS.showNotification('Failed to adjust stock: ' + result.message, 'error');
-    }
-}
     
     closeAdjustModal() {
-        document.getElementById('adjustStockModal').classList.remove('active');
+        const modal = document.getElementById('adjustStockModal');
+        if (modal) modal.classList.remove('active');
         this.currentAdjustProduct = null;
     }
+    
+    // ============ ADD/EDIT PRODUCT ============
     openAddProduct() {
-    document.getElementById('productModalTitle').textContent = 'Add New Product';
-    document.getElementById('editProductId').value = '';
-    document.getElementById('productName').value = '';
-    document.getElementById('productCategory').value = '';
-    document.getElementById('productUOM').value = 'kg';
-    document.getElementById('productUOMHidden').value = 'kg';
-    document.getElementById('productPrice').value = '';
-    document.getElementById('productNguniaSize').value = this.settings?.nguniaDefault || 1000;
-    document.getElementById('productInitNgunias').value = '0';
-    document.getElementById('productInitKg').value = '0';
-    document.getElementById('productInitBags').value = '0';
-    document.getElementById('productInitVolume').value = '0';
-    document.getElementById('productInitCount').value = '0';
-    document.getElementById('productInitCartons').value = '0';
-    document.getElementById('productInitLength').value = '0';
-    document.getElementById('kgPerBag').value = '50';
-    document.getElementById('itemsPerCarton').value = '12';
-    document.getElementById('productThreshold').value = this.settings?.lowStockThreshold || 100;
-    
-    this.handleUOMChange();
-    
-    document.getElementById('addProductModal').classList.add('active');
-}
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        
+        setText('productModalTitle', 'Add New Product');
+        setVal('editProductId', '');
+        setVal('productName', '');
+        setVal('productCategory', '');
+        setVal('productUOM', 'kg');
+        setVal('productUOMHidden', 'kg');
+        setVal('productPrice', '');
+        setVal('productNguniaSize', this.settings?.nguniaDefault || 1000);
+        setVal('productInitNgunias', '0');
+        setVal('productInitKg', '0');
+        setVal('productInitBags', '0');
+        setVal('productInitVolume', '0');
+        setVal('productInitCount', '0');
+        setVal('productInitCartons', '0');
+        setVal('productInitLength', '0');
+        setVal('kgPerBag', '50');
+        setVal('itemsPerCarton', '12');
+        setVal('productThreshold', this.settings?.lowStockThreshold || 100);
+        
+        this.handleUOMChange();
+        
+        const modal = document.getElementById('addProductModal');
+        if (modal) modal.classList.add('active');
+    }
     
     openEditProduct(productId) {
         const product = this.products.find(p => p.id === productId);
         if (!product) return;
         
+        const uom = product.uom || 'kg';
         const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const stock = product.currentStockKg || 0;
-        const ngunias = Math.floor(stock / nguniaSize);
-        const remainder = stock % nguniaSize;
         
-        document.getElementById('productModalTitle').textContent = 'Edit Product';
-        document.getElementById('editProductId').value = product.id;
-        document.getElementById('productName').value = product.name || '';
-        document.getElementById('productCategory').value = product.category || '';
-        document.getElementById('productPrice').value = product.pricePerKg || '';
-        document.getElementById('productNguniaSize').value = nguniaSize;
-        document.getElementById('productInitNgunias').value = ngunias;
-        document.getElementById('productInitKg').value = remainder.toFixed(2);
-        document.getElementById('productThreshold').value = product.lowStockThreshold || 100;
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
         
-        document.getElementById('addProductModal').classList.add('active');
+        setText('productModalTitle', 'Edit Product');
+        setVal('editProductId', product.id);
+        setVal('productName', product.name || '');
+        setVal('productCategory', product.category || '');
+        setVal('productUOM', uom);
+        setVal('productUOMHidden', uom);
+        setVal('productNguniaSize', nguniaSize);
+        setVal('productThreshold', product.lowStockThreshold || 100);
+        
+        // Set price and stock based on UOM
+        switch(uom) {
+            case 'kg':
+                setVal('productPrice', product.pricePerKg || '');
+                setVal('productInitNgunias', Math.floor((product.currentStockKg || 0) / nguniaSize));
+                setVal('productInitKg', ((product.currentStockKg || 0) % nguniaSize).toFixed(2));
+                break;
+            case 'bags':
+                setVal('productPrice', product.pricePerBag || '');
+                setVal('productInitBags', product.currentStockCount || 0);
+                setVal('kgPerBag', product.kgPerBag || 50);
+                break;
+            case 'litres':
+                setVal('productPrice', product.pricePerLitre || '');
+                setVal('productInitVolume', product.currentStockLitres || 0);
+                break;
+            case 'ml':
+                setVal('productPrice', product.pricePer100ml || '');
+                setVal('productInitVolume', product.currentStockMl || 0);
+                break;
+            case 'pieces':
+                setVal('productPrice', product.pricePerPiece || '');
+                setVal('productInitCount', product.currentStockCount || 0);
+                break;
+            case 'grams':
+                setVal('productPrice', product.pricePerGram || '');
+                setVal('productInitCount', product.currentStockGrams || 0);
+                break;
+            case 'sachets':
+                setVal('productPrice', product.pricePerSachet || '');
+                setVal('productInitCount', product.currentStockCount || 0);
+                break;
+            case 'cartons':
+                setVal('productPrice', product.pricePerCarton || '');
+                setVal('productInitCartons', product.currentStockCount || 0);
+                setVal('itemsPerCarton', product.itemsPerCarton || 12);
+                break;
+            case 'rolls':
+                setVal('productPrice', product.pricePerRoll || '');
+                setVal('productInitLength', product.currentStockCount || 0);
+                break;
+            case 'metres':
+                setVal('productPrice', product.pricePerMetre || '');
+                setVal('productInitLength', product.currentStockMetres || 0);
+                break;
+            default:
+                setVal('productPrice', product.pricePerKg || '');
+        }
+        
+        this.handleUOMChange();
+        
+        const modal = document.getElementById('addProductModal');
+        if (modal) modal.classList.add('active');
     }
+    
     async saveProduct() {
-    const editId = document.getElementById('editProductId').value;
-    const name = document.getElementById('productName').value.trim();
-    const category = document.getElementById('productCategory').value;
-    const uom = document.getElementById('productUOM').value;
-    const price = parseFloat(document.getElementById('productPrice').value);
-    const threshold = parseInt(document.getElementById('productThreshold').value) || 0;
-    
-    if (!name) {
-        BashanPOS.showNotification('Product name is required', 'warning');
-        return;
-    }
-    if (isNaN(price) || price <= 0) {
-        BashanPOS.showNotification('Valid price is required', 'warning');
-        return;
-    }
-    
-    let stockQuantity = 0;
-    let productData = {
-        name: name,
-        category: category || '',
-        uom: uom,
-        price: price,
-        lowStockThreshold: threshold,
-        archived: false,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    
-    switch(uom) {
-        case 'kg':
-            const ngunias = parseFloat(document.getElementById('productInitNgunias')?.value) || 0;
-            const extraKg = parseFloat(document.getElementById('productInitKg')?.value) || 0;
-            const nguniaSize = parseInt(document.getElementById('productNguniaSize')?.value) || 1000;
-            
-            if (isNaN(nguniaSize) || nguniaSize <= 0) {
-                BashanPOS.showNotification('Valid ngunia size is required', 'warning');
-                return;
-            }
-            
-            stockQuantity = (ngunias * nguniaSize) + extraKg;
-            productData.nguniaKg = nguniaSize;
-            productData.pricePerKg = price;
-            productData.currentStockKg = stockQuantity;
-            break;
-            
-        case 'bags':
-            const bags = parseInt(document.getElementById('productInitBags')?.value) || 0;
-            const kgPerBag = parseFloat(document.getElementById('kgPerBag')?.value) || 50;
-            
-            if (isNaN(kgPerBag) || kgPerBag <= 0) {
-                BashanPOS.showNotification('Valid weight per bag is required', 'warning');
-                return;
-            }
-            
-            stockQuantity = bags;
-            productData.kgPerBag = kgPerBag;
-            productData.pricePerBag = price;
-            productData.currentStockCount = bags;
-            productData.currentStockKg = bags * kgPerBag;
-            break;
-            
-        case 'litres':
-            stockQuantity = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
-            productData.pricePerLitre = price;
-            productData.currentStockLitres = stockQuantity;
-            break;
-            
-        case 'ml':
-            stockQuantity = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
-            productData.pricePer100ml = price;
-            productData.currentStockMl = stockQuantity;
-            break;
-            
-        case 'pieces':
-            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
-            productData.pricePerPiece = price;
-            productData.currentStockCount = stockQuantity;
-            break;
-            
-        case 'grams':
-            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
-            productData.pricePerGram = price;
-            productData.currentStockGrams = stockQuantity;
-            break;
-            
-        case 'sachets':
-            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
-            productData.pricePerSachet = price;
-            productData.currentStockCount = stockQuantity;
-            break;
-            
-        case 'cartons':
-            const cartons = parseInt(document.getElementById('productInitCartons')?.value) || 0;
-            const itemsPerCarton = parseInt(document.getElementById('itemsPerCarton')?.value) || 12;
-            
-            if (isNaN(itemsPerCarton) || itemsPerCarton < 1) {
-                BashanPOS.showNotification('Valid items per carton is required', 'warning');
-                return;
-            }
-            
-            stockQuantity = cartons;
-            productData.itemsPerCarton = itemsPerCarton;
-            productData.pricePerCarton = price;
-            productData.currentStockCount = cartons;
-            productData.currentStockPieces = cartons * itemsPerCarton;
-            break;
-            
-        case 'rolls':
-            stockQuantity = parseFloat(document.getElementById('productInitLength')?.value) || 0;
-            productData.pricePerRoll = price;
-            productData.currentStockCount = stockQuantity;
-            break;
-            
-        case 'metres':
-            stockQuantity = parseFloat(document.getElementById('productInitLength')?.value) || 0;
-            productData.pricePerMetre = price;
-            productData.currentStockMetres = stockQuantity;
-            break;
-    }
-    
-    if (isNaN(stockQuantity) || stockQuantity < 0) {
-        BashanPOS.showNotification('Invalid stock calculation', 'error');
-        return;
-    }
-    
-    console.log('💾 Saving product:', productData);
-    
-    try {
-        if (editId) {
-            await BashanPOS.productsRef.doc(editId).update(productData);
-            BashanPOS.showNotification('Product updated successfully!', 'success');
-            BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name} (${uom})`);
-        } else {
-            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            await BashanPOS.productsRef.add(productData);
-            BashanPOS.showNotification('Product added successfully!', 'success');
-            BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name} (${uom})`);
+        const getVal = (id) => document.getElementById(id)?.value || '';
+        const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
+        const getInt = (id) => parseInt(document.getElementById(id)?.value) || 0;
+        
+        const editId = getVal('editProductId');
+        const name = getVal('productName').trim();
+        const category = getVal('productCategory');
+        const uom = getVal('productUOM');
+        const price = getNum('productPrice');
+        const threshold = getInt('productThreshold');
+        
+        if (!name) { BashanPOS.showNotification('Product name is required', 'warning'); return; }
+        if (isNaN(price) || price <= 0) { BashanPOS.showNotification('Valid price is required', 'warning'); return; }
+        
+        let stockQuantity = 0;
+        let productData = {
+            name: name,
+            category: category || '',
+            uom: uom,
+            lowStockThreshold: threshold,
+            archived: false,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        switch(uom) {
+            case 'kg':
+                const ngunias = getNum('productInitNgunias');
+                const extraKg = getNum('productInitKg');
+                const nguniaSize = getInt('productNguniaSize');
+                if (isNaN(nguniaSize) || nguniaSize <= 0) { BashanPOS.showNotification('Valid ngunia size is required', 'warning'); return; }
+                stockQuantity = (ngunias * nguniaSize) + extraKg;
+                productData.nguniaKg = nguniaSize;
+                productData.pricePerKg = price;
+                productData.currentStockKg = stockQuantity;
+                break;
+            case 'bags':
+                const bags = getInt('productInitBags');
+                const kgPerBag = getNum('kgPerBag');
+                if (isNaN(kgPerBag) || kgPerBag <= 0) { BashanPOS.showNotification('Valid weight per bag is required', 'warning'); return; }
+                stockQuantity = bags;
+                productData.kgPerBag = kgPerBag;
+                productData.pricePerBag = price;
+                productData.currentStockCount = bags;
+                productData.currentStockKg = bags * kgPerBag;
+                break;
+            case 'litres':
+                stockQuantity = getNum('productInitVolume');
+                productData.pricePerLitre = price;
+                productData.currentStockLitres = stockQuantity;
+                break;
+            case 'ml':
+                stockQuantity = getNum('productInitVolume');
+                productData.pricePer100ml = price;
+                productData.currentStockMl = stockQuantity;
+                break;
+            case 'pieces':
+                stockQuantity = getInt('productInitCount');
+                productData.pricePerPiece = price;
+                productData.currentStockCount = stockQuantity;
+                break;
+            case 'grams':
+                stockQuantity = getInt('productInitCount');
+                productData.pricePerGram = price;
+                productData.currentStockGrams = stockQuantity;
+                break;
+            case 'sachets':
+                stockQuantity = getInt('productInitCount');
+                productData.pricePerSachet = price;
+                productData.currentStockCount = stockQuantity;
+                break;
+            case 'cartons':
+                const cartons = getInt('productInitCartons');
+                const itemsPerCarton = getInt('itemsPerCarton');
+                if (isNaN(itemsPerCarton) || itemsPerCarton < 1) { BashanPOS.showNotification('Valid items per carton is required', 'warning'); return; }
+                stockQuantity = cartons;
+                productData.itemsPerCarton = itemsPerCarton;
+                productData.pricePerCarton = price;
+                productData.currentStockCount = cartons;
+                productData.currentStockPieces = cartons * itemsPerCarton;
+                break;
+            case 'rolls':
+                stockQuantity = getNum('productInitLength');
+                productData.pricePerRoll = price;
+                productData.currentStockCount = stockQuantity;
+                break;
+            case 'metres':
+                stockQuantity = getNum('productInitLength');
+                productData.pricePerMetre = price;
+                productData.currentStockMetres = stockQuantity;
+                break;
         }
         
-        this.closeProductModal();
-        await this.loadProducts();
-    } catch (error) {
-        console.error('❌ Save product error:', error);
-        BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
-    }
-}
-    handleUOMChange() {
-    const uom = document.getElementById('productUOM').value;
-    document.getElementById('productUOMHidden').value = uom;
-    
-    const groups = [
-        'stockKgInputs', 'stockBagsInputs', 'stockVolumeInputs',
-        'stockCountInputs', 'stockCartonInputs', 'stockLengthInputs',
-        'nguniaSizeGroup', 'kgPerBagGroup'
-    ];
-    groups.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
-    });
-    
-    switch(uom) {
-        case 'kg':
-            document.getElementById('stockKgInputs').style.display = 'flex';
-            document.getElementById('nguniaSizeGroup').style.display = 'block';
-            document.getElementById('priceLabel').textContent = 'Price per Kilogram (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per kg';
-            document.getElementById('mainUnitLabel1').textContent = 'Ngunias/Bags';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (kg)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in kg';
-            document.getElementById('productThreshold').value = this.settings?.lowStockThreshold || 100;
-            break;
-            
-        case 'bags':
-            document.getElementById('stockBagsInputs').style.display = 'flex';
-            document.getElementById('kgPerBagGroup').style.display = 'block';
-            document.getElementById('priceLabel').textContent = 'Price per Bag (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per bag';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (bags)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many bags';
-            document.getElementById('productThreshold').value = 5;
-            break;
-            
-        case 'litres':
-            document.getElementById('stockVolumeInputs').style.display = 'flex';
-            document.getElementById('volumeLabel').textContent = 'Quantity (Litres)';
-            document.getElementById('priceLabel').textContent = 'Price per Litre (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per litre';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (litres)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in litres';
-            document.getElementById('productThreshold').value = 10;
-            break;
-            
-        case 'ml':
-            document.getElementById('stockVolumeInputs').style.display = 'flex';
-            document.getElementById('volumeLabel').textContent = 'Quantity (Millilitres)';
-            document.getElementById('priceLabel').textContent = 'Price per 100mL (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per 100mL';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (mL)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in mL';
-            document.getElementById('productThreshold').value = 500;
-            break;
-            
-        case 'pieces':
-            document.getElementById('stockCountInputs').style.display = 'flex';
-            document.getElementById('countLabel').textContent = 'Quantity (Pieces)';
-            document.getElementById('priceLabel').textContent = 'Price per Piece (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per piece';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (pieces)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many pieces';
-            document.getElementById('productThreshold').value = 10;
-            break;
-            
-        case 'grams':
-            document.getElementById('stockCountInputs').style.display = 'flex';
-            document.getElementById('countLabel').textContent = 'Quantity (Grams)';
-            document.getElementById('priceLabel').textContent = 'Price per Gram (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per gram';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (grams)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in grams';
-            document.getElementById('productThreshold').value = 500;
-            break;
-            
-        case 'sachets':
-            document.getElementById('stockCountInputs').style.display = 'flex';
-            document.getElementById('countLabel').textContent = 'Quantity (Sachets/Packets)';
-            document.getElementById('priceLabel').textContent = 'Price per Sachet (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per sachet/packet';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (sachets)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many sachets';
-            document.getElementById('productThreshold').value = 20;
-            break;
-            
-        case 'cartons':
-            document.getElementById('stockCartonInputs').style.display = 'flex';
-            document.getElementById('priceLabel').textContent = 'Price per Carton (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per carton';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (cartons)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many cartons';
-            document.getElementById('productThreshold').value = 2;
-            break;
-            
-        case 'rolls':
-            document.getElementById('stockLengthInputs').style.display = 'flex';
-            document.getElementById('priceLabel').textContent = 'Price per Roll (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per roll';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (rolls)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many rolls';
-            document.getElementById('productThreshold').value = 3;
-            break;
-            
-        case 'metres':
-            document.getElementById('stockLengthInputs').style.display = 'flex';
-            document.getElementById('priceLabel').textContent = 'Price per Metre (KSH) *';
-            document.getElementById('priceHint').textContent = 'Enter the price per metre';
-            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (metres)';
-            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many metres';
-            document.getElementById('productThreshold').value = 20;
-            break;
-    }
-    
-    this.updateStockTotalDisplay();
-}
-
-setupStockInputListeners() {
-    const stockInputs = [
-        'productInitNgunias', 'productInitKg', 'productInitBags',
-        'productInitVolume', 'productInitCount', 'productInitCartons',
-        'itemsPerCarton', 'productInitLength', 'productNguniaSize', 'kgPerBag'
-    ];
-    
-    stockInputs.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener('input', () => this.updateStockTotalDisplay());
+        if (isNaN(stockQuantity) || stockQuantity < 0) {
+            BashanPOS.showNotification('Invalid stock calculation', 'error');
+            return;
         }
-    });
-}
-
-updateStockTotalDisplay() {
-    const uom = document.getElementById('productUOM')?.value || 'kg';
-    const totalDisplay = document.getElementById('totalStockDisplay');
-    if (!totalDisplay) return;
-    
-    let displayText = '';
-    
-    switch(uom) {
-        case 'kg':
-            const ngunias = parseFloat(document.getElementById('productInitNgunias')?.value) || 0;
-            const extraKg = parseFloat(document.getElementById('productInitKg')?.value) || 0;
-            const nguniaSize = parseInt(document.getElementById('productNguniaSize')?.value) || 1000;
-            const totalKg = (ngunias * nguniaSize) + extraKg;
-            displayText = `${totalKg.toFixed(2)} kg (${(totalKg / nguniaSize).toFixed(3)} ngunias)`;
-            break;
+        
+        console.log('💾 Saving product:', productData);
+        
+        try {
+            if (editId) {
+                await BashanPOS.productsRef.doc(editId).update(productData);
+                BashanPOS.showNotification('Product updated successfully!', 'success');
+                BashanPOS.logAudit('PRODUCT_EDIT', 'Edited product: ' + name + ' (' + uom + ')');
+            } else {
+                productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await BashanPOS.productsRef.add(productData);
+                BashanPOS.showNotification('Product added successfully!', 'success');
+                BashanPOS.logAudit('PRODUCT_ADD', 'Added product: ' + name + ' (' + uom + ')');
+            }
             
-        case 'bags':
-            const bags = parseInt(document.getElementById('productInitBags')?.value) || 0;
-            const kgPerBag = parseFloat(document.getElementById('kgPerBag')?.value) || 50;
-            const bagsTotalKg = bags * kgPerBag;
-            const bagsTotalEl = document.getElementById('productBagsTotalKg');
-            if (bagsTotalEl) bagsTotalEl.value = bagsTotalKg.toFixed(2);
-            displayText = `${bags} bags (${bagsTotalKg.toFixed(2)} kg total)`;
-            break;
-            
-        case 'litres':
-            const litres = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
-            displayText = `${litres.toFixed(2)} litres`;
-            break;
-            
-        case 'ml':
-            const ml = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
-            displayText = `${ml.toFixed(0)} mL (${(ml / 1000).toFixed(3)} L)`;
-            break;
-            
-        case 'pieces':
-        case 'grams':
-            const count = parseInt(document.getElementById('productInitCount')?.value) || 0;
-            displayText = `${count} ${uom}`;
-            break;
-            
-        case 'sachets':
-            const sachets = parseInt(document.getElementById('productInitCount')?.value) || 0;
-            displayText = `${sachets} sachets/packets`;
-            break;
-            
-        case 'cartons':
-            const cartons = parseInt(document.getElementById('productInitCartons')?.value) || 0;
-            const itemsPerCarton = parseInt(document.getElementById('itemsPerCarton')?.value) || 12;
-            displayText = `${cartons} cartons (${cartons * itemsPerCarton} total items)`;
-            break;
-            
-        case 'rolls':
-            const rolls = parseFloat(document.getElementById('productInitLength')?.value) || 0;
-            displayText = `${rolls} rolls`;
-            break;
-            
-        case 'metres':
-            const metres = parseFloat(document.getElementById('productInitLength')?.value) || 0;
-            displayText = `${metres.toFixed(2)} metres`;
-            break;
+            this.closeProductModal();
+            await this.loadProducts();
+        } catch (error) {
+            console.error('❌ Save product error:', error);
+            BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
+        }
     }
     
-    totalDisplay.textContent = displayText;
-}
+    handleUOMChange() {
+        const uomEl = document.getElementById('productUOM');
+        const uomHidden = document.getElementById('productUOMHidden');
+        if (!uomEl) return;
+        
+        const uom = uomEl.value;
+        if (uomHidden) uomHidden.value = uom;
+        
+        const groups = [
+            'stockKgInputs', 'stockBagsInputs', 'stockVolumeInputs',
+            'stockCountInputs', 'stockCartonInputs', 'stockLengthInputs',
+            'nguniaSizeGroup', 'kgPerBagGroup'
+        ];
+        groups.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        
+        const setLabel = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        const show = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'flex'; };
+        const showBlock = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'block'; };
+        
+        switch(uom) {
+            case 'kg':
+                show('stockKgInputs');
+                showBlock('nguniaSizeGroup');
+                setLabel('priceLabel', 'Price per Kilogram (KSH) *');
+                setLabel('priceHint', 'Enter the price per kg');
+                setLabel('mainUnitLabel1', 'Ngunias/Bags');
+                setLabel('thresholdLabel', 'Low Stock Threshold (kg)');
+                setLabel('thresholdHint', 'Alert when stock falls below this amount in kg');
+                setVal('productThreshold', this.settings?.lowStockThreshold || 100);
+                break;
+            case 'bags':
+                show('stockBagsInputs');
+                showBlock('kgPerBagGroup');
+                setLabel('priceLabel', 'Price per Bag (KSH) *');
+                setLabel('priceHint', 'Enter the price per bag');
+                setLabel('thresholdLabel', 'Low Stock Threshold (bags)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many bags');
+                setVal('productThreshold', 5);
+                break;
+            case 'litres':
+                show('stockVolumeInputs');
+                setLabel('volumeLabel', 'Quantity (Litres)');
+                setLabel('priceLabel', 'Price per Litre (KSH) *');
+                setLabel('priceHint', 'Enter the price per litre');
+                setLabel('thresholdLabel', 'Low Stock Threshold (litres)');
+                setLabel('thresholdHint', 'Alert when stock falls below this amount in litres');
+                setVal('productThreshold', 10);
+                break;
+            case 'ml':
+                show('stockVolumeInputs');
+                setLabel('volumeLabel', 'Quantity (Millilitres)');
+                setLabel('priceLabel', 'Price per 100mL (KSH) *');
+                setLabel('priceHint', 'Enter the price per 100mL');
+                setLabel('thresholdLabel', 'Low Stock Threshold (mL)');
+                setLabel('thresholdHint', 'Alert when stock falls below this amount in mL');
+                setVal('productThreshold', 500);
+                break;
+            case 'pieces':
+                show('stockCountInputs');
+                setLabel('countLabel', 'Quantity (Pieces)');
+                setLabel('priceLabel', 'Price per Piece (KSH) *');
+                setLabel('priceHint', 'Enter the price per piece');
+                setLabel('thresholdLabel', 'Low Stock Threshold (pieces)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many pieces');
+                setVal('productThreshold', 10);
+                break;
+            case 'grams':
+                show('stockCountInputs');
+                setLabel('countLabel', 'Quantity (Grams)');
+                setLabel('priceLabel', 'Price per Gram (KSH) *');
+                setLabel('priceHint', 'Enter the price per gram');
+                setLabel('thresholdLabel', 'Low Stock Threshold (grams)');
+                setLabel('thresholdHint', 'Alert when stock falls below this amount in grams');
+                setVal('productThreshold', 500);
+                break;
+            case 'sachets':
+                show('stockCountInputs');
+                setLabel('countLabel', 'Quantity (Sachets/Packets)');
+                setLabel('priceLabel', 'Price per Sachet (KSH) *');
+                setLabel('priceHint', 'Enter the price per sachet/packet');
+                setLabel('thresholdLabel', 'Low Stock Threshold (sachets)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many sachets');
+                setVal('productThreshold', 20);
+                break;
+            case 'cartons':
+                show('stockCartonInputs');
+                setLabel('priceLabel', 'Price per Carton (KSH) *');
+                setLabel('priceHint', 'Enter the price per carton');
+                setLabel('thresholdLabel', 'Low Stock Threshold (cartons)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many cartons');
+                setVal('productThreshold', 2);
+                break;
+            case 'rolls':
+                show('stockLengthInputs');
+                setLabel('priceLabel', 'Price per Roll (KSH) *');
+                setLabel('priceHint', 'Enter the price per roll');
+                setLabel('thresholdLabel', 'Low Stock Threshold (rolls)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many rolls');
+                setVal('productThreshold', 3);
+                break;
+            case 'metres':
+                show('stockLengthInputs');
+                setLabel('priceLabel', 'Price per Metre (KSH) *');
+                setLabel('priceHint', 'Enter the price per metre');
+                setLabel('thresholdLabel', 'Low Stock Threshold (metres)');
+                setLabel('thresholdHint', 'Alert when stock falls below this many metres');
+                setVal('productThreshold', 20);
+                break;
+        }
+        
+        this.updateStockTotalDisplay();
+    }
+    
+    setupStockInputListeners() {
+        const stockInputs = [
+            'productInitNgunias', 'productInitKg', 'productInitBags',
+            'productInitVolume', 'productInitCount', 'productInitCartons',
+            'itemsPerCarton', 'productInitLength', 'productNguniaSize', 'kgPerBag'
+        ];
+        
+        stockInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', () => this.updateStockTotalDisplay());
+            }
+        });
+    }
+    
+    updateStockTotalDisplay() {
+        const uom = document.getElementById('productUOM')?.value || 'kg';
+        const totalDisplay = document.getElementById('totalStockDisplay');
+        if (!totalDisplay) return;
+        
+        let displayText = '';
+        
+        switch(uom) {
+            case 'kg':
+                const ngunias = parseFloat(document.getElementById('productInitNgunias')?.value) || 0;
+                const extraKg = parseFloat(document.getElementById('productInitKg')?.value) || 0;
+                const nguniaSize = parseInt(document.getElementById('productNguniaSize')?.value) || 1000;
+                const totalKg = (ngunias * nguniaSize) + extraKg;
+                displayText = totalKg.toFixed(2) + ' kg (' + (totalKg / nguniaSize).toFixed(3) + ' ngunias)';
+                break;
+            case 'bags':
+                const bags = parseInt(document.getElementById('productInitBags')?.value) || 0;
+                const kgPerBag = parseFloat(document.getElementById('kgPerBag')?.value) || 50;
+                const bagsTotalKg = bags * kgPerBag;
+                const bagsTotalEl = document.getElementById('productBagsTotalKg');
+                if (bagsTotalEl) bagsTotalEl.value = bagsTotalKg.toFixed(2);
+                displayText = bags + ' bags (' + bagsTotalKg.toFixed(2) + ' kg total)';
+                break;
+            case 'litres':
+                displayText = (parseFloat(document.getElementById('productInitVolume')?.value) || 0).toFixed(2) + ' litres';
+                break;
+            case 'ml':
+                displayText = (parseFloat(document.getElementById('productInitVolume')?.value) || 0).toFixed(0) + ' mL';
+                break;
+            case 'pieces':
+            case 'grams':
+                displayText = (parseInt(document.getElementById('productInitCount')?.value) || 0) + ' ' + uom;
+                break;
+            case 'sachets':
+                displayText = (parseInt(document.getElementById('productInitCount')?.value) || 0) + ' sachets';
+                break;
+            case 'cartons':
+                const cartons = parseInt(document.getElementById('productInitCartons')?.value) || 0;
+                const ipc = parseInt(document.getElementById('itemsPerCarton')?.value) || 12;
+                displayText = cartons + ' cartons (' + (cartons * ipc) + ' total items)';
+                break;
+            case 'rolls':
+                displayText = (parseFloat(document.getElementById('productInitLength')?.value) || 0) + ' rolls';
+                break;
+            case 'metres':
+                displayText = (parseFloat(document.getElementById('productInitLength')?.value) || 0).toFixed(2) + ' metres';
+                break;
+        }
+        
+        totalDisplay.textContent = displayText;
+    }
+    
     closeProductModal() {
-        document.getElementById('addProductModal').classList.remove('active');
+        const modal = document.getElementById('addProductModal');
+        if (modal) modal.classList.remove('active');
     }
     
     async archiveProduct(productId) {
         const product = this.products.find(p => p.id === productId);
         if (!product) return;
         
-        const confirmed = await BashanPOS.showConfirm(
-            `Archive "${product.name}"?\n\nThis product will be hidden but not deleted.`
-        );
-        
+        const confirmed = await BashanPOS.showConfirm('Archive "' + product.name + '"?\n\nThis product will be hidden but not deleted.');
         if (!confirmed) return;
         
         try {
@@ -1182,9 +1172,8 @@ updateStockTotalDisplay() {
                 archived: true,
                 archivedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            
             BashanPOS.showNotification('Product archived', 'success');
-            BashanPOS.logAudit('PRODUCT_ARCHIVE', `Archived product: ${product.name}`);
+            BashanPOS.logAudit('PRODUCT_ARCHIVE', 'Archived product: ' + product.name);
             await this.loadProducts();
         } catch (error) {
             BashanPOS.showNotification('Failed to archive product', 'error');
@@ -1193,17 +1182,17 @@ updateStockTotalDisplay() {
     
     // ============ STOCK HISTORY ============
     async openHistory() {
-        document.getElementById('historyModal').classList.add('active');
+        const modal = document.getElementById('historyModal');
+        if (modal) modal.classList.add('active');
         await this.loadHistory();
     }
     
     async loadHistory() {
         try {
-            const productFilter = document.getElementById('historyProduct').value;
-            const typeFilter = document.getElementById('historyType').value;
+            const productFilter = document.getElementById('historyProduct')?.value || 'all';
+            const typeFilter = document.getElementById('historyType')?.value || 'all';
             
             let query = BashanPOS.stockLogRef.orderBy('timestamp', 'desc').limit(200);
-            
             if (productFilter !== 'all') {
                 query = query.where('productId', '==', productFilter);
             }
@@ -1220,77 +1209,100 @@ updateStockTotalDisplay() {
             this.renderHistory();
         } catch (error) {
             console.error('Load history error:', error);
-            document.getElementById('historyTableBody').innerHTML = 
-                '<tr><td colspan="8" style="text-align:center;padding:30px;">Failed to load history</td></tr>';
+            const tbody = document.getElementById('historyTableBody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;">Failed to load history</td></tr>';
         }
     }
-    getCurrentStockForUOM(product, uom) {
-    switch(uom) {
-        case 'kg': return product.currentStockKg || 0;
-        case 'bags': return product.currentStockCount || 0;
-        case 'litres': return product.currentStockLitres || 0;
-        case 'ml': return product.currentStockMl || 0;
-        case 'pieces': return product.currentStockCount || 0;
-        case 'grams': return product.currentStockGrams || 0;
-        case 'sachets': return product.currentStockCount || 0;
-        case 'cartons': return product.currentStockCount || 0;
-        case 'rolls': return product.currentStockCount || 0;
-        case 'metres': return product.currentStockMetres || 0;
-        default: return product.currentStockKg || 0;
-    }
-}
+    
     renderHistory() {
         const tbody = document.getElementById('historyTableBody');
+        if (!tbody) return;
         
         if (this.historyData.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;">No stock movements found</td></tr>';
             return;
         }
         
-        tbody.innerHTML = this.historyData.map(log => `
-            <tr>
-                <td>${BashanPOS.formatDate(log.timestamp)}</td>
-                <td>${log.productName}</td>
-                <td><span class="type-badge ${log.type}">${log.type === 'add' ? 'Added' : 'Removed'}</span></td>
-                <td>${(log.quantityKg || 0).toFixed(2)} kg (${(log.quantityNgunia || 0).toFixed(3)} ngunias)</td>
-                <td>${(log.beforeStock || 0).toFixed(2)} kg</td>
-                <td>${(log.afterStock || 0).toFixed(2)} kg</td>
-                <td>${log.reason}</td>
-                <td>${log.doneByName}</td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = this.historyData.map(log => {
+            const uom = log.uom || 'kg';
+            let qtyDisplay = '';
+            
+            switch(uom) {
+                case 'kg': qtyDisplay = (log.quantityKg || 0).toFixed(2) + ' kg'; break;
+                case 'bags': qtyDisplay = (log.quantityBags || 0) + ' bags'; break;
+                case 'litres': qtyDisplay = (log.quantityLitres || 0).toFixed(2) + ' L'; break;
+                case 'ml': qtyDisplay = (log.quantityMl || 0).toFixed(0) + ' mL'; break;
+                case 'pieces': qtyDisplay = (log.quantityPieces || 0) + ' pcs'; break;
+                case 'grams': qtyDisplay = (log.quantityGrams || 0) + 'g'; break;
+                case 'sachets': qtyDisplay = (log.quantitySachets || 0) + ' sachets'; break;
+                case 'cartons': qtyDisplay = (log.quantityCartons || 0) + ' cartons'; break;
+                case 'rolls': qtyDisplay = (log.quantityRolls || 0) + ' rolls'; break;
+                case 'metres': qtyDisplay = (log.quantityMetres || 0).toFixed(2) + ' m'; break;
+                default: qtyDisplay = (log.quantityKg || 0).toFixed(2) + ' kg';
+            }
+            
+            const before = log.beforeStock || 0;
+            const after = log.afterStock || 0;
+            
+            return '<tr>' +
+                '<td>' + BashanPOS.formatDate(log.timestamp) + '</td>' +
+                '<td>' + log.productName + '</td>' +
+                '<td><span class="type-badge ' + log.type + '">' + (log.type === 'add' ? 'Added' : 'Removed') + '</span></td>' +
+                '<td>' + qtyDisplay + '</td>' +
+                '<td>' + before + '</td>' +
+                '<td>' + after + '</td>' +
+                '<td>' + log.reason + '</td>' +
+                '<td>' + log.doneByName + '</td>' +
+            '</tr>';
+        }).join('');
     }
     
     closeHistory() {
-        document.getElementById('historyModal').classList.remove('active');
+        const modal = document.getElementById('historyModal');
+        if (modal) modal.classList.remove('active');
     }
     
     // ============ EXPORT ============
     exportInventory() {
         const filtered = this.getFilteredProducts();
-        
         if (filtered.length === 0) {
             BashanPOS.showNotification('No data to export', 'warning');
             return;
         }
         
-        let csv = 'Product,Category,Ngunia Size (kg),Current Stock (kg),Price/kg (KSH),Stock Value,Status\n';
+        let csv = 'Product,Category,UOM,Current Stock,Price,Stock Value,Status\n';
         
         filtered.forEach(p => {
-            const nguniaSize = p.nguniaKg || 1000;
-            const stock = p.currentStockKg || 0;
-            const status = stock <= 0 ? 'Out of Stock' : 
-                          stock <= (p.lowStockThreshold || 100) ? 'Low Stock' : 'In Stock';
+            const uom = p.uom || 'kg';
+            let stock = 0, price = 0, value = 0, stockDisplay = '';
+            const threshold = p.lowStockThreshold || 100;
             const categoryName = this.categories.find(c => c.id === p.category)?.name || 'N/A';
             
-            csv += `"${p.name}","${categoryName}",${nguniaSize},${stock},${p.pricePerKg || 0},${stock * (p.pricePerKg || 0)},"${status}"\n`;
+            switch(uom) {
+                case 'kg': stock = p.currentStockKg || 0; price = p.pricePerKg || 0; stockDisplay = stock + ' kg'; break;
+                case 'bags': stock = p.currentStockCount || 0; price = p.pricePerBag || 0; stockDisplay = stock + ' bags'; break;
+                case 'litres': stock = p.currentStockLitres || 0; price = p.pricePerLitre || 0; stockDisplay = stock + ' L'; break;
+                case 'ml': stock = p.currentStockMl || 0; price = p.pricePer100ml || 0; stockDisplay = stock + ' mL'; break;
+                case 'pieces': stock = p.currentStockCount || 0; price = p.pricePerPiece || 0; stockDisplay = stock + ' pcs'; break;
+                case 'grams': stock = p.currentStockGrams || 0; price = p.pricePerGram || 0; stockDisplay = stock + 'g'; break;
+                case 'sachets': stock = p.currentStockCount || 0; price = p.pricePerSachet || 0; stockDisplay = stock + ' sachets'; break;
+                case 'cartons': stock = p.currentStockCount || 0; price = p.pricePerCarton || 0; stockDisplay = stock + ' cartons'; break;
+                case 'rolls': stock = p.currentStockCount || 0; price = p.pricePerRoll || 0; stockDisplay = stock + ' rolls'; break;
+                case 'metres': stock = p.currentStockMetres || 0; price = p.pricePerMetre || 0; stockDisplay = stock + ' m'; break;
+                default: stock = p.currentStockKg || 0; price = p.pricePerKg || 0; stockDisplay = stock + ' kg';
+            }
+            
+            value = stock * price;
+            const status = stock <= 0 ? 'Out of Stock' : (stock <= threshold ? 'Low Stock' : 'In Stock');
+            
+            csv += '"' + p.name + '","' + categoryName + '","' + uom + '",' + stock + ',' + price + ',' + value + ',"' + status + '"\n';
         });
         
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `inventory_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = 'inventory_' + new Date().toISOString().split('T')[0] + '.csv';
         a.click();
         URL.revokeObjectURL(url);
         
@@ -1303,19 +1315,28 @@ updateStockTotalDisplay() {
             return;
         }
         
-        let csv = 'Date,Product,Type,Quantity (kg),Quantity (ngunias),Before,After,Reason,Done By\n';
+        let csv = 'Date,Product,Type,Quantity,Before,After,Reason,Done By\n';
         
         this.historyData.forEach(log => {
-            csv += `"${BashanPOS.formatDate(log.timestamp)}","${log.productName}","${log.type}",` +
-                   `${log.quantityKg || 0},${log.quantityNgunia || 0},${log.beforeStock || 0},${log.afterStock || 0},` +
-                   `"${log.reason}","${log.doneByName}"\n`;
+            const uom = log.uom || 'kg';
+            let qty = '';
+            switch(uom) {
+                case 'kg': qty = (log.quantityKg || 0).toFixed(2) + ' kg'; break;
+                case 'bags': qty = (log.quantityBags || 0) + ' bags'; break;
+                case 'litres': qty = (log.quantityLitres || 0).toFixed(2) + ' L'; break;
+                default: qty = (log.quantityKg || 0) + ' ' + uom;
+            }
+            
+            csv += '"' + BashanPOS.formatDate(log.timestamp) + '","' + log.productName + '","' + log.type + '",' +
+                   '"' + qty + '",' + (log.beforeStock || 0) + ',' + (log.afterStock || 0) + ',' +
+                   '"' + log.reason + '","' + log.doneByName + '"\n';
         });
         
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `stock_history_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = 'stock_history_' + new Date().toISOString().split('T')[0] + '.csv';
         a.click();
         URL.revokeObjectURL(url);
     }
