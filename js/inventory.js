@@ -1224,7 +1224,21 @@ updateStockTotalDisplay() {
                 '<tr><td colspan="8" style="text-align:center;padding:30px;">Failed to load history</td></tr>';
         }
     }
-    
+    getCurrentStockForUOM(product, uom) {
+    switch(uom) {
+        case 'kg': return product.currentStockKg || 0;
+        case 'bags': return product.currentStockCount || 0;
+        case 'litres': return product.currentStockLitres || 0;
+        case 'ml': return product.currentStockMl || 0;
+        case 'pieces': return product.currentStockCount || 0;
+        case 'grams': return product.currentStockGrams || 0;
+        case 'sachets': return product.currentStockCount || 0;
+        case 'cartons': return product.currentStockCount || 0;
+        case 'rolls': return product.currentStockCount || 0;
+        case 'metres': return product.currentStockMetres || 0;
+        default: return product.currentStockKg || 0;
+    }
+}
     renderHistory() {
         const tbody = document.getElementById('historyTableBody');
         
