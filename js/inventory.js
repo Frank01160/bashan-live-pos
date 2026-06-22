@@ -58,6 +58,9 @@ class InventorySystem {
         
         // Export
         document.getElementById('exportInventoryBtn').addEventListener('click', () => this.exportInventory());
+        //for item type
+        this.setupStockInputListeners();
+
         
         // Adjustment modal
         document.getElementById('closeAdjustModal').addEventListener('click', () => this.closeAdjustModal());
@@ -548,21 +551,30 @@ class InventorySystem {
         document.getElementById('adjustStockModal').classList.remove('active');
         this.currentAdjustProduct = null;
     }
-    
-    // ============ ADD/EDIT PRODUCT ============
     openAddProduct() {
-        document.getElementById('productModalTitle').textContent = 'Add New Product';
-        document.getElementById('editProductId').value = '';
-        document.getElementById('productName').value = '';
-        document.getElementById('productCategory').value = '';
-        document.getElementById('productPrice').value = '';
-        document.getElementById('productNguniaSize').value = this.settings?.nguniaDefault || 1000;
-        document.getElementById('productInitNgunias').value = '0';
-        document.getElementById('productInitKg').value = '0';
-        document.getElementById('productThreshold').value = this.settings?.lowStockThreshold || 100;
-        
-        document.getElementById('addProductModal').classList.add('active');
-    }
+    document.getElementById('productModalTitle').textContent = 'Add New Product';
+    document.getElementById('editProductId').value = '';
+    document.getElementById('productName').value = '';
+    document.getElementById('productCategory').value = '';
+    document.getElementById('productUOM').value = 'kg';
+    document.getElementById('productUOMHidden').value = 'kg';
+    document.getElementById('productPrice').value = '';
+    document.getElementById('productNguniaSize').value = this.settings?.nguniaDefault || 1000;
+    document.getElementById('productInitNgunias').value = '0';
+    document.getElementById('productInitKg').value = '0';
+    document.getElementById('productInitBags').value = '0';
+    document.getElementById('productInitVolume').value = '0';
+    document.getElementById('productInitCount').value = '0';
+    document.getElementById('productInitCartons').value = '0';
+    document.getElementById('productInitLength').value = '0';
+    document.getElementById('kgPerBag').value = '50';
+    document.getElementById('itemsPerCarton').value = '12';
+    document.getElementById('productThreshold').value = this.settings?.lowStockThreshold || 100;
+    
+    this.handleUOMChange();
+    
+    document.getElementById('addProductModal').classList.add('active');
+}
     
     openEditProduct(productId) {
         const product = this.products.find(p => p.id === productId);
@@ -585,71 +597,349 @@ class InventorySystem {
         
         document.getElementById('addProductModal').classList.add('active');
     }
-    
     async saveProduct() {
-        const editId = document.getElementById('editProductId').value;
-        const name = document.getElementById('productName').value.trim();
-        const category = document.getElementById('productCategory').value;
-        const pricePerKg = parseFloat(document.getElementById('productPrice').value);
-        const nguniaSize = parseInt(document.getElementById('productNguniaSize').value);
-        const initNgunias = parseFloat(document.getElementById('productInitNgunias').value) || 0;
-        const initKg = parseFloat(document.getElementById('productInitKg').value) || 0;
-        const threshold = parseInt(document.getElementById('productThreshold').value) || 100;
-        
-        // Validation
-        if (!name) {
-            BashanPOS.showNotification('Product name is required', 'warning');
-            return;
-        }
-        if (isNaN(pricePerKg) || pricePerKg <= 0) {
-            BashanPOS.showNotification('Valid price is required', 'warning');
-            return;
-        }
-        if (isNaN(nguniaSize) || nguniaSize <= 0) {
-            BashanPOS.showNotification('Valid ngunia size is required', 'warning');
-            return;
-        }
-        
-        const totalStock = (initNgunias * nguniaSize) + initKg;
-        
-        if (isNaN(totalStock) || totalStock < 0) {
-            BashanPOS.showNotification('Invalid stock calculation', 'error');
-            return;
-        }
-        
-        const productData = {
-            name: name,
-            category: category || '',
-            pricePerKg: pricePerKg,
-            nguniaKg: nguniaSize,
-            currentStockKg: totalStock,
-            lowStockThreshold: threshold,
-            archived: false,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        console.log('💾 Saving product:', productData);
-        
-        try {
-            if (editId) {
-                await BashanPOS.productsRef.doc(editId).update(productData);
-                BashanPOS.showNotification('Product updated successfully!', 'success');
-                BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name}`);
-            } else {
-                productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                await BashanPOS.productsRef.add(productData);
-                BashanPOS.showNotification('Product added successfully!', 'success');
-                BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name}`);
-            }
-            
-            this.closeProductModal();
-            await this.loadProducts();
-        } catch (error) {
-            console.error('❌ Save product error:', error);
-            BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
-        }
+    const editId = document.getElementById('editProductId').value;
+    const name = document.getElementById('productName').value.trim();
+    const category = document.getElementById('productCategory').value;
+    const uom = document.getElementById('productUOM').value;
+    const price = parseFloat(document.getElementById('productPrice').value);
+    const threshold = parseInt(document.getElementById('productThreshold').value) || 0;
+    
+    if (!name) {
+        BashanPOS.showNotification('Product name is required', 'warning');
+        return;
+    }
+    if (isNaN(price) || price <= 0) {
+        BashanPOS.showNotification('Valid price is required', 'warning');
+        return;
     }
     
+    let stockQuantity = 0;
+    let productData = {
+        name: name,
+        category: category || '',
+        uom: uom,
+        price: price,
+        lowStockThreshold: threshold,
+        archived: false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    switch(uom) {
+        case 'kg':
+            const ngunias = parseFloat(document.getElementById('productInitNgunias')?.value) || 0;
+            const extraKg = parseFloat(document.getElementById('productInitKg')?.value) || 0;
+            const nguniaSize = parseInt(document.getElementById('productNguniaSize')?.value) || 1000;
+            
+            if (isNaN(nguniaSize) || nguniaSize <= 0) {
+                BashanPOS.showNotification('Valid ngunia size is required', 'warning');
+                return;
+            }
+            
+            stockQuantity = (ngunias * nguniaSize) + extraKg;
+            productData.nguniaKg = nguniaSize;
+            productData.pricePerKg = price;
+            productData.currentStockKg = stockQuantity;
+            break;
+            
+        case 'bags':
+            const bags = parseInt(document.getElementById('productInitBags')?.value) || 0;
+            const kgPerBag = parseFloat(document.getElementById('kgPerBag')?.value) || 50;
+            
+            if (isNaN(kgPerBag) || kgPerBag <= 0) {
+                BashanPOS.showNotification('Valid weight per bag is required', 'warning');
+                return;
+            }
+            
+            stockQuantity = bags;
+            productData.kgPerBag = kgPerBag;
+            productData.pricePerBag = price;
+            productData.currentStockCount = bags;
+            productData.currentStockKg = bags * kgPerBag;
+            break;
+            
+        case 'litres':
+            stockQuantity = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
+            productData.pricePerLitre = price;
+            productData.currentStockLitres = stockQuantity;
+            break;
+            
+        case 'ml':
+            stockQuantity = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
+            productData.pricePer100ml = price;
+            productData.currentStockMl = stockQuantity;
+            break;
+            
+        case 'pieces':
+            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
+            productData.pricePerPiece = price;
+            productData.currentStockCount = stockQuantity;
+            break;
+            
+        case 'grams':
+            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
+            productData.pricePerGram = price;
+            productData.currentStockGrams = stockQuantity;
+            break;
+            
+        case 'sachets':
+            stockQuantity = parseInt(document.getElementById('productInitCount')?.value) || 0;
+            productData.pricePerSachet = price;
+            productData.currentStockCount = stockQuantity;
+            break;
+            
+        case 'cartons':
+            const cartons = parseInt(document.getElementById('productInitCartons')?.value) || 0;
+            const itemsPerCarton = parseInt(document.getElementById('itemsPerCarton')?.value) || 12;
+            
+            if (isNaN(itemsPerCarton) || itemsPerCarton < 1) {
+                BashanPOS.showNotification('Valid items per carton is required', 'warning');
+                return;
+            }
+            
+            stockQuantity = cartons;
+            productData.itemsPerCarton = itemsPerCarton;
+            productData.pricePerCarton = price;
+            productData.currentStockCount = cartons;
+            productData.currentStockPieces = cartons * itemsPerCarton;
+            break;
+            
+        case 'rolls':
+            stockQuantity = parseFloat(document.getElementById('productInitLength')?.value) || 0;
+            productData.pricePerRoll = price;
+            productData.currentStockCount = stockQuantity;
+            break;
+            
+        case 'metres':
+            stockQuantity = parseFloat(document.getElementById('productInitLength')?.value) || 0;
+            productData.pricePerMetre = price;
+            productData.currentStockMetres = stockQuantity;
+            break;
+    }
+    
+    if (isNaN(stockQuantity) || stockQuantity < 0) {
+        BashanPOS.showNotification('Invalid stock calculation', 'error');
+        return;
+    }
+    
+    console.log('💾 Saving product:', productData);
+    
+    try {
+        if (editId) {
+            await BashanPOS.productsRef.doc(editId).update(productData);
+            BashanPOS.showNotification('Product updated successfully!', 'success');
+            BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name} (${uom})`);
+        } else {
+            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await BashanPOS.productsRef.add(productData);
+            BashanPOS.showNotification('Product added successfully!', 'success');
+            BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name} (${uom})`);
+        }
+        
+        this.closeProductModal();
+        await this.loadProducts();
+    } catch (error) {
+        console.error('❌ Save product error:', error);
+        BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
+    }
+}
+    handleUOMChange() {
+    const uom = document.getElementById('productUOM').value;
+    document.getElementById('productUOMHidden').value = uom;
+    
+    const groups = [
+        'stockKgInputs', 'stockBagsInputs', 'stockVolumeInputs',
+        'stockCountInputs', 'stockCartonInputs', 'stockLengthInputs',
+        'nguniaSizeGroup', 'kgPerBagGroup'
+    ];
+    groups.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    
+    switch(uom) {
+        case 'kg':
+            document.getElementById('stockKgInputs').style.display = 'flex';
+            document.getElementById('nguniaSizeGroup').style.display = 'block';
+            document.getElementById('priceLabel').textContent = 'Price per Kilogram (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per kg';
+            document.getElementById('mainUnitLabel1').textContent = 'Ngunias/Bags';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (kg)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in kg';
+            document.getElementById('productThreshold').value = this.settings?.lowStockThreshold || 100;
+            break;
+            
+        case 'bags':
+            document.getElementById('stockBagsInputs').style.display = 'flex';
+            document.getElementById('kgPerBagGroup').style.display = 'block';
+            document.getElementById('priceLabel').textContent = 'Price per Bag (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per bag';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (bags)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many bags';
+            document.getElementById('productThreshold').value = 5;
+            break;
+            
+        case 'litres':
+            document.getElementById('stockVolumeInputs').style.display = 'flex';
+            document.getElementById('volumeLabel').textContent = 'Quantity (Litres)';
+            document.getElementById('priceLabel').textContent = 'Price per Litre (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per litre';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (litres)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in litres';
+            document.getElementById('productThreshold').value = 10;
+            break;
+            
+        case 'ml':
+            document.getElementById('stockVolumeInputs').style.display = 'flex';
+            document.getElementById('volumeLabel').textContent = 'Quantity (Millilitres)';
+            document.getElementById('priceLabel').textContent = 'Price per 100mL (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per 100mL';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (mL)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in mL';
+            document.getElementById('productThreshold').value = 500;
+            break;
+            
+        case 'pieces':
+            document.getElementById('stockCountInputs').style.display = 'flex';
+            document.getElementById('countLabel').textContent = 'Quantity (Pieces)';
+            document.getElementById('priceLabel').textContent = 'Price per Piece (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per piece';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (pieces)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many pieces';
+            document.getElementById('productThreshold').value = 10;
+            break;
+            
+        case 'grams':
+            document.getElementById('stockCountInputs').style.display = 'flex';
+            document.getElementById('countLabel').textContent = 'Quantity (Grams)';
+            document.getElementById('priceLabel').textContent = 'Price per Gram (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per gram';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (grams)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this amount in grams';
+            document.getElementById('productThreshold').value = 500;
+            break;
+            
+        case 'sachets':
+            document.getElementById('stockCountInputs').style.display = 'flex';
+            document.getElementById('countLabel').textContent = 'Quantity (Sachets/Packets)';
+            document.getElementById('priceLabel').textContent = 'Price per Sachet (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per sachet/packet';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (sachets)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many sachets';
+            document.getElementById('productThreshold').value = 20;
+            break;
+            
+        case 'cartons':
+            document.getElementById('stockCartonInputs').style.display = 'flex';
+            document.getElementById('priceLabel').textContent = 'Price per Carton (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per carton';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (cartons)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many cartons';
+            document.getElementById('productThreshold').value = 2;
+            break;
+            
+        case 'rolls':
+            document.getElementById('stockLengthInputs').style.display = 'flex';
+            document.getElementById('priceLabel').textContent = 'Price per Roll (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per roll';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (rolls)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many rolls';
+            document.getElementById('productThreshold').value = 3;
+            break;
+            
+        case 'metres':
+            document.getElementById('stockLengthInputs').style.display = 'flex';
+            document.getElementById('priceLabel').textContent = 'Price per Metre (KSH) *';
+            document.getElementById('priceHint').textContent = 'Enter the price per metre';
+            document.getElementById('thresholdLabel').textContent = 'Low Stock Threshold (metres)';
+            document.getElementById('thresholdHint').textContent = 'Alert when stock falls below this many metres';
+            document.getElementById('productThreshold').value = 20;
+            break;
+    }
+    
+    this.updateStockTotalDisplay();
+}
+
+setupStockInputListeners() {
+    const stockInputs = [
+        'productInitNgunias', 'productInitKg', 'productInitBags',
+        'productInitVolume', 'productInitCount', 'productInitCartons',
+        'itemsPerCarton', 'productInitLength', 'productNguniaSize', 'kgPerBag'
+    ];
+    
+    stockInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', () => this.updateStockTotalDisplay());
+        }
+    });
+}
+
+updateStockTotalDisplay() {
+    const uom = document.getElementById('productUOM')?.value || 'kg';
+    const totalDisplay = document.getElementById('totalStockDisplay');
+    if (!totalDisplay) return;
+    
+    let displayText = '';
+    
+    switch(uom) {
+        case 'kg':
+            const ngunias = parseFloat(document.getElementById('productInitNgunias')?.value) || 0;
+            const extraKg = parseFloat(document.getElementById('productInitKg')?.value) || 0;
+            const nguniaSize = parseInt(document.getElementById('productNguniaSize')?.value) || 1000;
+            const totalKg = (ngunias * nguniaSize) + extraKg;
+            displayText = `${totalKg.toFixed(2)} kg (${(totalKg / nguniaSize).toFixed(3)} ngunias)`;
+            break;
+            
+        case 'bags':
+            const bags = parseInt(document.getElementById('productInitBags')?.value) || 0;
+            const kgPerBag = parseFloat(document.getElementById('kgPerBag')?.value) || 50;
+            const bagsTotalKg = bags * kgPerBag;
+            const bagsTotalEl = document.getElementById('productBagsTotalKg');
+            if (bagsTotalEl) bagsTotalEl.value = bagsTotalKg.toFixed(2);
+            displayText = `${bags} bags (${bagsTotalKg.toFixed(2)} kg total)`;
+            break;
+            
+        case 'litres':
+            const litres = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
+            displayText = `${litres.toFixed(2)} litres`;
+            break;
+            
+        case 'ml':
+            const ml = parseFloat(document.getElementById('productInitVolume')?.value) || 0;
+            displayText = `${ml.toFixed(0)} mL (${(ml / 1000).toFixed(3)} L)`;
+            break;
+            
+        case 'pieces':
+        case 'grams':
+            const count = parseInt(document.getElementById('productInitCount')?.value) || 0;
+            displayText = `${count} ${uom}`;
+            break;
+            
+        case 'sachets':
+            const sachets = parseInt(document.getElementById('productInitCount')?.value) || 0;
+            displayText = `${sachets} sachets/packets`;
+            break;
+            
+        case 'cartons':
+            const cartons = parseInt(document.getElementById('productInitCartons')?.value) || 0;
+            const itemsPerCarton = parseInt(document.getElementById('itemsPerCarton')?.value) || 12;
+            displayText = `${cartons} cartons (${cartons * itemsPerCarton} total items)`;
+            break;
+            
+        case 'rolls':
+            const rolls = parseFloat(document.getElementById('productInitLength')?.value) || 0;
+            displayText = `${rolls} rolls`;
+            break;
+            
+        case 'metres':
+            const metres = parseFloat(document.getElementById('productInitLength')?.value) || 0;
+            displayText = `${metres.toFixed(2)} metres`;
+            break;
+    }
+    
+    totalDisplay.textContent = displayText;
+}
     closeProductModal() {
         document.getElementById('addProductModal').classList.remove('active');
     }
