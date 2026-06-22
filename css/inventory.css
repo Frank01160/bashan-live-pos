@@ -10,7 +10,20 @@
     flex-direction: column;
     padding-bottom: 40px;
 }
-
+/* UOM badge inline in table */
+.uom-badge-inline {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: rgba(64, 196, 255, 0.15);
+    color: #40c4ff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+}
 /* ============ TOP BAR ============ */
 .top-bar {
     display: flex;
