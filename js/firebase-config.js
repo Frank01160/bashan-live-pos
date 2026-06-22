@@ -422,6 +422,7 @@ function completeSale(saleData) {
     const batch = db.batch();
     const saleRef = salesRef.doc();
     
+    // Generate receipt number
     const date = new Date();
     const receiptNumber = 'BSH-' + date.getFullYear() + 
                           String(date.getMonth() + 1).padStart(2, '0') +
@@ -443,52 +444,106 @@ function completeSale(saleData) {
     
     batch.set(saleRef, sale);
     
-    // Deduct stock based on UOM
+    // Deduct stock for each item based on UOM and sellMode
     saleData.items.forEach(item => {
         const productRef = productsRef.doc(item.productId);
         const uom = item.uom || 'kg';
         const qty = item.qty || 0;
+        const sellMode = item.sellMode || 'unit';
+        
+        console.log('🔻 Deducting stock:', item.name, 'UOM:', uom, 'Mode:', sellMode, 'Qty:', qty);
         
         switch(uom) {
             case 'kg':
-                batch.update(productRef, {
-                    currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty * 1000))
-                });
+                // For kg products: qty is in ngunias, qtyKg is actual kg
+                if (sellMode === 'kg') {
+                    // Selling directly by kg
+                    batch.update(productRef, {
+                        currentStockKg: firebase.firestore.FieldValue.increment(-qty)
+                    });
+                } else {
+                    // Selling by ngunias - deduct kg equivalent
+                    batch.update(productRef, {
+                        currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty * (item.nguniaSize || 1000)))
+                    });
+                }
                 break;
+                
             case 'bags':
-                batch.update(productRef, {
-                    currentStockCount: firebase.firestore.FieldValue.increment(-qty),
-                    currentStockKg: firebase.firestore.FieldValue.increment(-(qty * (item.kgPerBag || 50)))
-                });
+                if (sellMode === 'kg') {
+                    // Selling bags by kg - deduct from currentStockKg AND recalculate bag count
+                    const kgPerBag = item.kgPerBag || 50;
+                    const kgToDeduct = qty;
+                    const bagsToDeduct = kgToDeduct / kgPerBag;
+                    
+                    batch.update(productRef, {
+                        currentStockKg: firebase.firestore.FieldValue.increment(-kgToDeduct),
+                        currentStockCount: firebase.firestore.FieldValue.increment(-bagsToDeduct)
+                    });
+                    console.log('🔻 Bags kg mode: deducting', kgToDeduct, 'kg and', bagsToDeduct, 'bags');
+                } else {
+                    // Selling by bags - deduct bag count and kg equivalent
+                    const kgPerBag = item.kgPerBag || 50;
+                    batch.update(productRef, {
+                        currentStockCount: firebase.firestore.FieldValue.increment(-qty),
+                        currentStockKg: firebase.firestore.FieldValue.increment(-(qty * kgPerBag))
+                    });
+                    console.log('🔻 Bags unit mode: deducting', qty, 'bags and', qty * kgPerBag, 'kg');
+                }
                 break;
+                
             case 'litres':
-                batch.update(productRef, { currentStockLitres: firebase.firestore.FieldValue.increment(-qty) });
-                break;
-            case 'ml':
-                batch.update(productRef, { currentStockMl: firebase.firestore.FieldValue.increment(-qty) });
-                break;
-            case 'pieces':
-                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
-                break;
-            case 'grams':
-                batch.update(productRef, { currentStockGrams: firebase.firestore.FieldValue.increment(-qty) });
-                break;
-            case 'sachets':
-                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
-                break;
-            case 'cartons':
                 batch.update(productRef, {
-                    currentStockCount: firebase.firestore.FieldValue.increment(-qty),
-                    currentStockPieces: firebase.firestore.FieldValue.increment(-(qty * (item.itemsPerCarton || 12)))
+                    currentStockLitres: firebase.firestore.FieldValue.increment(-qty)
                 });
                 break;
+                
+            case 'ml':
+                batch.update(productRef, {
+                    currentStockMl: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'pieces':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'grams':
+                batch.update(productRef, {
+                    currentStockGrams: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'sachets':
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
+                break;
+                
+            case 'cartons':
+                const itemsPerCarton = item.itemsPerCarton || 12;
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty),
+                    currentStockPieces: firebase.firestore.FieldValue.increment(-(qty * itemsPerCarton))
+                });
+                break;
+                
             case 'rolls':
-                batch.update(productRef, { currentStockCount: firebase.firestore.FieldValue.increment(-qty) });
+                batch.update(productRef, {
+                    currentStockCount: firebase.firestore.FieldValue.increment(-qty)
+                });
                 break;
+                
             case 'metres':
-                batch.update(productRef, { currentStockMetres: firebase.firestore.FieldValue.increment(-qty) });
+                batch.update(productRef, {
+                    currentStockMetres: firebase.firestore.FieldValue.increment(-qty)
+                });
                 break;
+                
             default:
+                // Fallback to kg
                 batch.update(productRef, {
                     currentStockKg: firebase.firestore.FieldValue.increment(-(item.qtyKg || qty))
                 });
@@ -497,7 +552,7 @@ function completeSale(saleData) {
     
     return batch.commit()
         .then(() => {
-            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total}`);
+            logAudit('SALE_COMPLETE', 'Sale ' + receiptNumber + ': KSH ' + saleData.total + ' (' + saleData.items.length + ' items)');
             return { success: true, receiptNumber, saleId: saleRef.id };
         })
         .catch(error => {
@@ -505,7 +560,6 @@ function completeSale(saleData) {
             return { success: false, message: error.message };
         });
 }
-
 // ============================================
 // SETTINGS FUNCTIONS
 // ============================================
