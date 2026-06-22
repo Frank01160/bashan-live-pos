@@ -3,7 +3,7 @@
 // Firebase Configuration & Core Functions
 // ============================================
 
-// Your Firebase config - Replace with your own when deploying
+// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyB5eH7B9IbQb-slA6rphFhGhGwyXfj3moE",
   authDomain: "bashan-pos-c539b.firebaseapp.com",
@@ -20,8 +20,8 @@ const auth = firebase.auth();
 
 // Enable offline persistence
 db.enablePersistence()
-    .then(() => console.log('Offline mode enabled'))
-    .catch(err => console.log('Persistence error:', err.code));
+    .then(() => console.log('✅ Offline mode enabled'))
+    .catch(err => console.log('⚠️ Persistence error:', err.code));
 
 // ============================================
 // COLLECTION REFERENCES
@@ -39,35 +39,30 @@ const sessionsRef = db.collection('sessions');
 // ============================================
 const APP_VERSION = '1.0.0';
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const LOCKOUT_DURATION = 15 * 60 * 1000;
+const SESSION_TIMEOUT = 30 * 60 * 1000;
 const DEFAULT_NGUNIA_KG = 1000;
-const LOW_STOCK_THRESHOLD = 100; // kg
+const LOW_STOCK_THRESHOLD = 100;
 
 // ============================================
 // AUDIT LOGGING
 // ============================================
-async function logAudit(action, details) {
+function logAudit(action, details) {
     const user = JSON.parse(sessionStorage.getItem('bashan_user'));
     if (!user) return;
     
-    try {
-        await auditLogRef.add({
-            userId: user.id,
-            userName: user.name,
-            role: user.role,
-            action: action,
-            details: details,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            ipHash: await getIPHash()
-        });
-    } catch (error) {
-        console.error('Audit log error:', error);
-    }
+    auditLogRef.add({
+        userId: user.id,
+        userName: user.name,
+        role: user.role,
+        action: action,
+        details: details,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        ipHash: getIPHash()
+    }).catch(err => console.error('Audit log error:', err));
 }
 
-async function getIPHash() {
-    // Simple hash of timestamp + user agent for tracking
+function getIPHash() {
     const data = navigator.userAgent + Date.now();
     let hash = 0;
     for (let i = 0; i < data.length; i++) {
@@ -81,12 +76,11 @@ async function getIPHash() {
 // ============================================
 // AUTH FUNCTIONS
 // ============================================
-async function verifyPassword(inputPassword, role = 'seller') {
-    try {
-        const settingsDoc = await settingsRef.doc('app').get();
-        if (!settingsDoc.exists) {
+function verifyPassword(inputPassword, role) {
+    return settingsRef.doc('app').get().then(doc => {
+        if (!doc.exists) {
             // First time setup - create default passwords
-            await settingsRef.doc('app').set({
+            return settingsRef.doc('app').set({
                 passwordManager: hashPassword('admin123'),
                 passwordSeller: hashPassword('seller123'),
                 businessName: 'Bashan Livestock Feeds',
@@ -98,11 +92,13 @@ async function verifyPassword(inputPassword, role = 'seller') {
                 maxDiscount: 5000,
                 sessionTimeout: 30,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                logAudit('SYSTEM_INIT', 'Default settings created');
+                return verifyPassword(inputPassword, role);
             });
-            logAudit('SYSTEM_INIT', 'Default settings created');
         }
         
-        const settings = settingsDoc.data();
+        const settings = doc.data();
         const storedHash = role === 'manager' ? settings.passwordManager : settings.passwordSeller;
         const inputHash = hashPassword(inputPassword);
         
@@ -110,14 +106,13 @@ async function verifyPassword(inputPassword, role = 'seller') {
             return { success: true, role: role };
         }
         return { success: false, message: 'Incorrect password' };
-    } catch (error) {
+    }).catch(error => {
         console.error('Auth error:', error);
         return { success: false, message: 'Authentication failed. Check connection.' };
-    }
+    });
 }
 
 function hashPassword(password) {
-    // Simple but effective hashing (for demo - use bcrypt in production)
     let hash = 0;
     const salt = "BASHAN_POS_SALT_2024";
     const combined = password + salt;
@@ -126,7 +121,6 @@ function hashPassword(password) {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
-    // Add complexity
     for (let i = 0; i < 1000; i++) {
         hash = ((hash << 5) - hash) + hash % 256;
         hash = hash & hash;
@@ -134,17 +128,16 @@ function hashPassword(password) {
     return Math.abs(hash).toString(16);
 }
 
-async function updatePassword(newPassword, role) {
-    try {
-        const field = role === 'manager' ? 'passwordManager' : 'passwordSeller';
-        await settingsRef.doc('app').update({
-            [field]: hashPassword(newPassword)
-        });
-        await logAudit('PASSWORD_CHANGE', `Password changed for ${role}`);
+function updatePassword(newPassword, role) {
+    const field = role === 'manager' ? 'passwordManager' : 'passwordSeller';
+    return settingsRef.doc('app').update({
+        [field]: hashPassword(newPassword)
+    }).then(() => {
+        logAudit('PASSWORD_CHANGE', `Password changed for ${role}`);
         return { success: true };
-    } catch (error) {
+    }).catch(error => {
         return { success: false, message: error.message };
-    }
+    });
 }
 
 // ============================================
@@ -158,10 +151,7 @@ function saveSession(userData) {
     };
     sessionStorage.setItem('bashan_user', JSON.stringify(session));
     
-    // Set session timeout
     setTimeout(checkSession, SESSION_TIMEOUT);
-    
-    // Track activity
     document.addEventListener('click', resetSessionTimer);
     document.addEventListener('keypress', resetSessionTimer);
     
@@ -189,7 +179,7 @@ function resetSessionTimer() {
     }
 }
 
-function logout(reason = '') {
+function logout(reason) {
     const user = JSON.parse(sessionStorage.getItem('bashan_user'));
     if (user) {
         logAudit('LOGOUT', reason || 'Manual logout');
@@ -215,21 +205,22 @@ function checkAuth() {
 // ============================================
 // PRODUCT FUNCTIONS
 // ============================================
-async function getProducts() {
-    try {
-        const snapshot = await productsRef.where('archived', '==', false).get();
-        const products = [];
-        snapshot.forEach(doc => {
-            products.push({ id: doc.id, ...doc.data() });
+function getProducts() {
+    return productsRef.where('archived', '==', false).get()
+        .then(snapshot => {
+            const products = [];
+            snapshot.forEach(doc => {
+                products.push({ id: doc.id, ...doc.data() });
+            });
+            return products;
+        })
+        .catch(error => {
+            console.error('Get products error:', error);
+            return [];
         });
-        return products;
-    } catch (error) {
-        console.error('Get products error:', error);
-        return [];
-    }
 }
 
-async function getProductsRealtime(callback) {
+function getProductsRealtime(callback) {
     return productsRef.where('archived', '==', false)
         .onSnapshot(snapshot => {
             const products = [];
@@ -237,131 +228,144 @@ async function getProductsRealtime(callback) {
                 products.push({ id: doc.id, ...doc.data() });
             });
             callback(products);
+        }, error => {
+            console.error('Products realtime error:', error);
+            // Return empty array on error
+            callback([]);
         });
 }
 
-async function updateStock(productId, newStockKg, reason, notes, userName, userId) {
-    try {
-        const productDoc = await productsRef.doc(productId).get();
-        const oldStock = productDoc.data().currentStockKg;
-        const difference = newStockKg - oldStock;
-        
-        // Update product stock
-        await productsRef.doc(productId).update({
-            currentStockKg: newStockKg,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+function updateStock(productId, newStockKg, reason, notes, userName, userId) {
+    return productsRef.doc(productId).get()
+        .then(productDoc => {
+            if (!productDoc.exists) {
+                return { success: false, message: 'Product not found' };
+            }
+            
+            const oldStock = productDoc.data().currentStockKg || 0;
+            const difference = newStockKg - oldStock;
+            
+            // Update product stock
+            return productsRef.doc(productId).update({
+                currentStockKg: newStockKg,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                // Log the stock movement
+                return stockLogRef.add({
+                    productId: productId,
+                    productName: productDoc.data().name,
+                    type: difference > 0 ? 'add' : 'remove',
+                    quantityKg: Math.abs(difference),
+                    quantityNgunia: Math.abs(difference) / (productDoc.data().nguniaKg || DEFAULT_NGUNIA_KG),
+                    reason: reason,
+                    notes: notes || '',
+                    doneBy: userId,
+                    doneByName: userName,
+                    beforeStock: oldStock,
+                    afterStock: newStockKg,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => {
+                    logAudit('STOCK_UPDATE', `${productDoc.data().name}: ${oldStock}kg → ${newStockKg}kg (${reason})`);
+                    return { success: true };
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Stock update error:', error);
+            return { success: false, message: error.message };
         });
-        
-        // Log the stock movement
-        await stockLogRef.add({
-            productId: productId,
-            productName: productDoc.data().name,
-            type: difference > 0 ? 'add' : 'remove',
-            quantityKg: Math.abs(difference),
-            quantityNgunia: Math.abs(difference) / (productDoc.data().nguniaKg || DEFAULT_NGUNIA_KG),
-            reason: reason,
-            notes: notes || '',
-            doneBy: userId,
-            doneByName: userName,
-            beforeStock: oldStock,
-            afterStock: newStockKg,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        await logAudit('STOCK_UPDATE', `${productDoc.data().name}: ${oldStock}kg → ${newStockKg}kg (${reason})`);
-        
-        return { success: true };
-    } catch (error) {
-        console.error('Stock update error:', error);
-        return { success: false, message: error.message };
-    }
 }
 
 // ============================================
 // SALE FUNCTIONS
-// ============================================async function completeSale(saleData) {
-    try {
-        const batch = db.batch();
-        const saleRef = salesRef.doc();
-        
-        // Generate receipt number
-        const date = new Date();
-        const receiptNumber = 'BSH-' + date.getFullYear() + 
-                              String(date.getMonth() + 1).padStart(2, '0') +
-                              String(date.getDate()).padStart(2, '0') + '-' +
-                              String(Math.floor(Math.random() * 9999)).padStart(4, '0');
-        
-        const sale = {
-            receiptNumber: receiptNumber,
-            items: saleData.items,
-            subtotal: saleData.subtotal,
-            discountKsh: saleData.discountKsh || 0,
-            total: saleData.total,
-            paymentMethod: saleData.paymentMethod || 'Cash',
-            customerName: saleData.customerName || '',
-            sellerId: saleData.sellerId,
-            sellerName: saleData.sellerName,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        batch.set(saleRef, sale);
-        
-        // Deduct stock for each item
-        saleData.items.forEach(item => {
-            const productRef = productsRef.doc(item.productId);
-            // FIX: Changed from item.quantityKg to item.qtyKg
-            batch.update(productRef, {
-                currentStockKg: firebase.firestore.FieldValue.increment(-item.qtyKg)
-            });
+// ============================================
+function completeSale(saleData) {
+    const batch = db.batch();
+    const saleRef = salesRef.doc();
+    
+    // Generate receipt number
+    const date = new Date();
+    const receiptNumber = 'BSH-' + date.getFullYear() + 
+                          String(date.getMonth() + 1).padStart(2, '0') +
+                          String(date.getDate()).padStart(2, '0') + '-' +
+                          String(Math.floor(Math.random() * 9999)).padStart(4, '0');
+    
+    const sale = {
+        receiptNumber: receiptNumber,
+        items: saleData.items,
+        subtotal: saleData.subtotal,
+        discountKsh: saleData.discountKsh || 0,
+        total: saleData.total,
+        paymentMethod: saleData.paymentMethod || 'Cash',
+        customerName: saleData.customerName || '',
+        sellerId: saleData.sellerId,
+        sellerName: saleData.sellerName,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    batch.set(saleRef, sale);
+    
+    // Deduct stock for each item - FIXED: use qtyKg not quantityKg
+    saleData.items.forEach(item => {
+        const productRef = productsRef.doc(item.productId);
+        batch.update(productRef, {
+            currentStockKg: firebase.firestore.FieldValue.increment(-item.qtyKg)
         });
-        
-        await batch.commit();
-        
-        await logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total}`);
-        
-        return { success: true, receiptNumber, saleId: saleRef.id };
-    } catch (error) {
-        console.error('Sale error:', error);
-        return { success: false, message: error.message };
-    }
+    });
+    
+    return batch.commit()
+        .then(() => {
+            logAudit('SALE_COMPLETE', `Sale ${receiptNumber}: KSH ${saleData.total}`);
+            return { success: true, receiptNumber, saleId: saleRef.id };
+        })
+        .catch(error => {
+            console.error('Sale error:', error);
+            return { success: false, message: error.message };
+        });
 }
 
 // ============================================
 // SETTINGS FUNCTIONS
 // ============================================
-async function getSettings() {
-    try {
-        const doc = await settingsRef.doc('app').get();
-        if (doc.exists) {
-            return doc.data();
-        }
-        return null;
-    } catch (error) {
-        console.error('Settings error:', error);
-        return null;
-    }
+function getSettings() {
+    return settingsRef.doc('app').get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            }
+            return null;
+        })
+        .catch(error => {
+            console.error('Settings error:', error);
+            return null;
+        });
 }
 
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
 function formatCurrency(amount) {
-    return 'KSH ' + Number(amount).toLocaleString('en-KE', {
+    const num = Number(amount);
+    if (isNaN(num)) return 'KSH 0.00';
+    return 'KSH ' + num.toLocaleString('en-KE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
 }
 
-function formatStock(kg, nguniaSize = DEFAULT_NGUNIA_KG) {
-    if (kg <= 0) return '0 kg (Out of Stock)';
+function formatStock(kg, nguniaSize) {
+    const size = nguniaSize || DEFAULT_NGUNIA_KG;
+    const stockKg = Number(kg) || 0;
     
-    const ngunias = Math.floor(kg / nguniaSize);
-    const remainder = kg % nguniaSize;
+    if (stockKg <= 0) return '0 kg (Out of Stock)';
+    
+    const ngunias = Math.floor(stockKg / size);
+    const remainder = stockKg % size;
     
     if (ngunias === 0) {
         return `${remainder.toFixed(2)} kg`;
     } else if (remainder === 0) {
-        return `${ngunias} ngunia${ngunias > 1 ? 's' : ''} (${kg} kg)`;
+        return `${ngunias} ngunia${ngunias > 1 ? 's' : ''} (${stockKg} kg)`;
     } else {
         return `${ngunias} ngunia${ngunias > 1 ? 's' : ''} + ${remainder.toFixed(2)} kg`;
     }
@@ -379,9 +383,9 @@ function formatDate(timestamp) {
     });
 }
 
-function showNotification(message, type = 'info') {
+function showNotification(message, type) {
     const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
+    notification.className = 'notification notification-' + (type || 'info');
     notification.innerHTML = `
         <span>${message}</span>
         <button onclick="this.parentElement.remove()">×</button>
@@ -434,4 +438,4 @@ window.BashanPOS = {
     APP_VERSION, DEFAULT_NGUNIA_KG
 };
 
-console.log('🔥 Bashan POS Core Loaded - Version', APP_VERSION);
+console.log('✅ Bashan POS Core Loaded - Version', APP_VERSION);
