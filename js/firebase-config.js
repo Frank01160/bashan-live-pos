@@ -279,8 +279,7 @@ async function updateStock(productId, newStockKg, reason, notes, userName, userI
 
 // ============================================
 // SALE FUNCTIONS
-// ============================================
-async function completeSale(saleData) {
+// ============================================async function completeSale(saleData) {
     try {
         const batch = db.batch();
         const saleRef = salesRef.doc();
@@ -310,8 +309,9 @@ async function completeSale(saleData) {
         // Deduct stock for each item
         saleData.items.forEach(item => {
             const productRef = productsRef.doc(item.productId);
+            // FIX: Changed from item.quantityKg to item.qtyKg
             batch.update(productRef, {
-                currentStockKg: firebase.firestore.FieldValue.increment(-item.quantityKg)
+                currentStockKg: firebase.firestore.FieldValue.increment(-item.qtyKg)
             });
         });
         
