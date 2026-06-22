@@ -276,64 +276,156 @@
             </div>
         </div>
     </div>
-    
     <!-- ============ ADD PRODUCT MODAL ============ -->
-    <div class="modal-overlay" id="addProductModal">
-        <div class="modal-content product-modal">
-            <div class="modal-header">
-                <h2 id="productModalTitle">Add New Product</h2>
-                <button class="close-modal" id="closeProductModal">×</button>
+<div class="modal-overlay" id="addProductModal">
+    <div class="modal-content product-modal">
+        <div class="modal-header">
+            <h2 id="productModalTitle">Add New Product</h2>
+            <button class="close-modal" id="closeProductModal">×</button>
+        </div>
+        
+        <div class="modal-body">
+            <!-- Product Name -->
+            <div class="input-group">
+                <label>Product Name <span class="required">*</span></label>
+                <input type="text" id="productName" class="adj-input" placeholder="e.g., Layer Mash">
             </div>
             
-            <div class="modal-body">
-                <div class="input-group">
-                    <label>Product Name <span class="required">*</span></label>
-                    <input type="text" id="productName" class="adj-input" placeholder="e.g., Layer Mash">
-                </div>
+            <!-- Category -->
+            <div class="input-group">
+                <label>Category</label>
+                <select id="productCategory" class="reason-select">
+                    <option value="">Select or type category...</option>
+                </select>
+            </div>
+            
+            <!-- UNIT OF MEASURE - NEW! -->
+            <div class="input-group">
+                <label>Unit of Measure <span class="required">*</span></label>
+                <select id="productUOM" class="reason-select" onchange="inventorySystem.handleUOMChange()">
+                    <option value="kg">Kilograms (kg) - Bulk Feeds/Grains</option>
+                    <option value="bags">Bags - Pre-packaged Products</option>
+                    <option value="litres">Litres (L) - Liquid Products</option>
+                    <option value="pieces">Pieces (pcs) - Individual Items</option>
+                    <option value="grams">Grams (g) - Small Quantities</option>
+                    <option value="ml">Millilitres (mL) - Small Liquids</option>
+                    <option value="sachets">Sachets/Packets - Small Packs</option>
+                    <option value="cartons">Cartons - Bulk Boxes</option>
+                    <option value="rolls">Rolls - Wire/Fencing</option>
+                    <option value="metres">Metres (m) - Length Products</option>
+                </select>
+            </div>
+            
+            <!-- KG SPECIFIC: Ngunia Size (only shown for kg) -->
+            <div class="input-group" id="nguniaSizeGroup">
+                <label>Ngunia/Bag Size (kg per bag) <span class="required">*</span></label>
+                <input type="number" id="productNguniaSize" class="adj-input" value="1000" min="1" step="1">
+                <small>How many kg makes one full ngunia/bag?</small>
+            </div>
+            
+            <!-- BAGS SPECIFIC: Kg per bag (only shown for bags) -->
+            <div class="input-group" id="kgPerBagGroup" style="display:none;">
+                <label>Weight per Bag (kg) <span class="required">*</span></label>
+                <input type="number" id="kgPerBag" class="adj-input" value="50" min="0.01" step="0.01">
+                <small>How many kg does one bag weigh?</small>
+            </div>
+            
+            <!-- Price (changes label based on UOM) -->
+            <div class="input-group">
+                <label id="priceLabel">Price per Kilogram (KSH) <span class="required">*</span></label>
+                <input type="number" id="productPrice" class="adj-input" placeholder="0.00" min="0" step="0.01">
+                <small id="priceHint">Enter the price per kg</small>
+            </div>
+            
+            <!-- Initial Stock Section -->
+            <div class="stock-section">
+                <h4>📦 Initial Stock</h4>
                 
-                <div class="input-group">
-                    <label>Category</label>
-                    <select id="productCategory" class="reason-select">
-                        <option value="">Select category...</option>
-                    </select>
-                </div>
-                
-                <div class="input-row">
+                <!-- For KG: Ngunias + Extra KG -->
+                <div class="input-row" id="stockKgInputs">
                     <div class="input-group">
-                        <label>Price per Kg (KSH) <span class="required">*</span></label>
-                        <input type="number" id="productPrice" class="adj-input" placeholder="0.00" min="0" step="0.01">
-                    </div>
-                    <div class="input-group">
-                        <label>Ngunia Size (kg) <span class="required">*</span></label>
-                        <input type="number" id="productNguniaSize" class="adj-input" value="1000" min="1" step="1">
-                    </div>
-                </div>
-                
-                <div class="input-row">
-                    <div class="input-group">
-                        <label>Initial Stock - Ngunias</label>
+                        <label id="mainUnitLabel1">Ngunias/Bags</label>
                         <input type="number" id="productInitNgunias" class="adj-input" value="0" min="0" step="0.001">
                     </div>
+                    <span class="plus-sign">+</span>
                     <div class="input-group">
                         <label>Extra Kg</label>
                         <input type="number" id="productInitKg" class="adj-input" value="0" min="0" step="0.01">
                     </div>
                 </div>
                 
-                <div class="input-group">
-                    <label>Low Stock Threshold (kg)</label>
-                    <input type="number" id="productThreshold" class="adj-input" value="100" min="0" step="1">
+                <!-- For Bags: Number of bags (auto-calculates kg) -->
+                <div class="input-row" id="stockBagsInputs" style="display:none;">
+                    <div class="input-group">
+                        <label>Number of Bags</label>
+                        <input type="number" id="productInitBags" class="adj-input" value="0" min="0" step="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Total Weight (auto-calculated)</label>
+                        <input type="number" id="productBagsTotalKg" class="adj-input" value="0" disabled style="opacity:0.7;">
+                    </div>
                 </div>
                 
-                <input type="hidden" id="editProductId" value="">
+                <!-- For Litres/ml: Quantity -->
+                <div class="input-row" id="stockVolumeInputs" style="display:none;">
+                    <div class="input-group">
+                        <label id="volumeLabel">Quantity (Litres)</label>
+                        <input type="number" id="productInitVolume" class="adj-input" value="0" min="0" step="0.01">
+                    </div>
+                </div>
+                
+                <!-- For Pieces/Sachets: Count -->
+                <div class="input-row" id="stockCountInputs" style="display:none;">
+                    <div class="input-group">
+                        <label id="countLabel">Quantity (Pieces)</label>
+                        <input type="number" id="productInitCount" class="adj-input" value="0" min="0" step="1">
+                    </div>
+                </div>
+                
+                <!-- For Cartons: Number of cartons with items per carton -->
+                <div class="input-row" id="stockCartonInputs" style="display:none;">
+                    <div class="input-group">
+                        <label>Number of Cartons</label>
+                        <input type="number" id="productInitCartons" class="adj-input" value="0" min="0" step="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Items per Carton</label>
+                        <input type="number" id="itemsPerCarton" class="adj-input" value="12" min="1" step="1">
+                    </div>
+                </div>
+                
+                <!-- For Rolls/Metres: Length -->
+                <div class="input-row" id="stockLengthInputs" style="display:none;">
+                    <div class="input-group">
+                        <label>Quantity (Rolls/Metres)</label>
+                        <input type="number" id="productInitLength" class="adj-input" value="0" min="0" step="0.01">
+                    </div>
+                </div>
+                
+                <!-- Total display -->
+                <div class="calculated-total" id="stockTotalDisplay" style="margin-top:10px;">
+                    <span>Total Stock:</span>
+                    <strong id="totalStockDisplay">0 kg</strong>
+                </div>
             </div>
             
-            <div class="modal-footer">
-                <button class="outline-btn" id="cancelProductBtn">Cancel</button>
-                <button class="green-btn" id="saveProductBtn">Save Product</button>
+            <!-- Low Stock Threshold -->
+            <div class="input-group">
+                <label id="thresholdLabel">Low Stock Threshold</label>
+                <input type="number" id="productThreshold" class="adj-input" value="100" min="0" step="1">
+                <small id="thresholdHint">Alert when stock falls below this amount</small>
             </div>
+            
+            <input type="hidden" id="editProductId" value="">
+            <input type="hidden" id="productUOMHidden" value="kg">
+        </div>
+        
+        <div class="modal-footer">
+            <button class="outline-btn" id="cancelProductBtn">Cancel</button>
+            <button class="green-btn" id="saveProductBtn">Save Product</button>
         </div>
     </div>
+</div>
     
     <!-- Firebase Config -->
     <script src="js/firebase-config.js"></script>
