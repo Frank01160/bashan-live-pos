@@ -859,95 +859,170 @@ setupUI() {
     closeReports() {
         document.getElementById('reportsOverlay').classList.remove('active');
     }
-    
     async loadReport() {
-        const period = document.getElementById('reportPeriod').value;
-        const payment = document.getElementById('reportPayment').value;
-        
-        let startDate, endDate;
-        const now = new Date();
-        
-        switch (period) {
-            case 'today':
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                break;
-            case 'yesterday':
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                break;
-            case 'week':
-                const dayOfWeek = now.getDay();
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-                endDate = now;
-                break;
-            case 'month':
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = now;
-                break;
-            case 'custom':
-                startDate = new Date(document.getElementById('startDate').value);
-                endDate = new Date(document.getElementById('endDate').value);
-                endDate.setDate(endDate.getDate() + 1);
-                break;
-        }
-        
-        try {
-            let query = BashanPOS.salesRef
-                .where('timestamp', '>=', startDate)
-                .where('timestamp', '<', endDate)
-                .orderBy('timestamp', 'desc');
+    const period = document.getElementById('reportPeriod').value;
+    const payment = document.getElementById('reportPayment').value;
+    
+    let startDate, endDate;
+    const now = new Date();
+    
+    // Set date range based on period
+    switch (period) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+            break;
+        case 'yesterday':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            break;
+        case 'week':
+            const dayOfWeek = now.getDay(); // 0 = Sunday
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+            break;
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+            break;
+        case 'custom':
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
             
-            if (payment !== 'all') {
-                query = query.where('paymentMethod', '==', payment);
+            if (!startInput || !endInput) {
+                BashanPOS.showNotification('Please select both start and end dates', 'warning');
+                return;
             }
             
-            const snapshot = await query.get();
-            const sales = [];
-            snapshot.forEach(doc => {
-                sales.push({ id: doc.id, ...doc.data() });
-            });
-            
-            // Update summary
-            const totalRevenue = sales.reduce((sum, s) => sum + s.total, 0);
-            const totalDiscounts = sales.reduce((sum, s) => sum + (s.discountKsh || 0), 0);
-            const avgSale = sales.length > 0 ? totalRevenue / sales.length : 0;
-            
-            document.getElementById('reportRevenue').textContent = BashanPOS.formatCurrency(totalRevenue);
-            document.getElementById('reportDiscounts').textContent = BashanPOS.formatCurrency(totalDiscounts);
-            document.getElementById('reportCount').textContent = sales.length;
-            document.getElementById('reportAvg').textContent = BashanPOS.formatCurrency(avgSale);
-            
-            // Update table
-            const tbody = document.getElementById('reportTableBody');
-            
-            if (sales.length === 0) {
-                tbody.innerHTML = '<tr class="no-data"><td colspan="8">No sales found for this period</td></tr>';
-            } else {
-                tbody.innerHTML = sales.map(sale => `
-                    <tr>
-                        <td>${sale.receiptNumber}</td>
-                        <td>${BashanPOS.formatDate(sale.timestamp)}</td>
-                        <td>${sale.items.length} items</td>
-                        <td>${BashanPOS.formatCurrency(sale.subtotal)}</td>
-                        <td>${BashanPOS.formatCurrency(sale.discountKsh || 0)}</td>
-                        <td><strong>${BashanPOS.formatCurrency(sale.total)}</strong></td>
-                        <td>${sale.paymentMethod}</td>
-                        <td>${sale.sellerName}</td>
-                    </tr>
-                `).join('');
-            }
-            
-            // Store for export
-            this.currentReportData = sales;
-            this.currentReportPeriod = { startDate, endDate };
-            
-        } catch (error) {
-            console.error('Load report error:', error);
-            BashanPOS.showNotification('Failed to load report', 'error');
-        }
+            startDate = new Date(startInput + 'T00:00:00');
+            endDate = new Date(endInput + 'T23:59:59');
+            break;
+        default:
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
     }
     
+    console.log('📊 Loading report from', startDate, 'to', endDate);
+    
+    try {
+        // Show loading state
+        document.getElementById('reportRevenue').textContent = 'Loading...';
+        document.getElementById('reportDiscounts').textContent = '...';
+        document.getElementById('reportCount').textContent = '...';
+        document.getElementById('reportAvg').textContent = '...';
+        document.getElementById('reportTableBody').innerHTML = 
+            '<tr class="no-data"><td colspan="8">Loading report...</td></tr>';
+        
+        // Query sales
+        let query = BashanPOS.salesRef
+            .where('timestamp', '>=', startDate)
+            .where('timestamp', '<', endDate)
+            .orderBy('timestamp', 'desc');
+        
+        // Apply payment filter if needed
+        if (payment && payment !== 'all') {
+            query = query.where('paymentMethod', '==', payment);
+        }
+        
+        const snapshot = await query.get();
+        
+        console.log('📊 Found', snapshot.size, 'sales');
+        
+        const sales = [];
+        snapshot.forEach(doc => {
+            sales.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Update summary cards
+        const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+        const totalDiscounts = sales.reduce((sum, s) => sum + (s.discountKsh || 0), 0);
+        const avgSale = sales.length > 0 ? totalRevenue / sales.length : 0;
+        
+        document.getElementById('reportRevenue').textContent = BashanPOS.formatCurrency(totalRevenue);
+        document.getElementById('reportDiscounts').textContent = BashanPOS.formatCurrency(totalDiscounts);
+        document.getElementById('reportCount').textContent = sales.length;
+        document.getElementById('reportAvg').textContent = BashanPOS.formatCurrency(avgSale);
+        
+        // Update table
+        const tbody = document.getElementById('reportTableBody');
+        
+        if (sales.length === 0) {
+            tbody.innerHTML = `
+                <tr class="no-data">
+                    <td colspan="8">
+                        <div style="padding: 30px; text-align: center;">
+                            <p style="font-size: 16px; color: var(--text-muted);">📊 No sales found for this period</p>
+                            <p style="font-size: 12px; color: var(--text-muted);">
+                                ${period === 'today' ? 'Try selecting a different period or complete a sale first.' : 'Try selecting a different period.'}
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        } else {
+            tbody.innerHTML = sales.map(sale => {
+                // Format the timestamp safely
+                let dateStr = 'N/A';
+                if (sale.timestamp) {
+                    try {
+                        const date = sale.timestamp.toDate ? sale.timestamp.toDate() : new Date(sale.timestamp);
+                        dateStr = date.toLocaleDateString('en-KE', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    } catch (e) {
+                        dateStr = 'Invalid date';
+                    }
+                }
+                
+                return `
+                <tr>
+                    <td><strong>${sale.receiptNumber || 'N/A'}</strong></td>
+                    <td>${dateStr}</td>
+                    <td>${(sale.items && sale.items.length) || 0} items</td>
+                    <td>${BashanPOS.formatCurrency(sale.subtotal || 0)}</td>
+                    <td>${BashanPOS.formatCurrency(sale.discountKsh || 0)}</td>
+                    <td><strong>${BashanPOS.formatCurrency(sale.total || 0)}</strong></td>
+                    <td><span class="payment-badge payment-${(sale.paymentMethod || 'cash').toLowerCase()}">${sale.paymentMethod || 'Cash'}</span></td>
+                    <td>${sale.sellerName || 'Unknown'}</td>
+                </tr>
+                `;
+            }).join('');
+        }
+        
+        // Store for export
+        this.currentReportData = sales;
+        this.currentReportPeriod = { startDate, endDate, period, payment };
+        
+    } catch (error) {
+        console.error('❌ Load report error:', error);
+        
+        // Show error in UI
+        document.getElementById('reportRevenue').textContent = 'Error';
+        document.getElementById('reportDiscounts').textContent = 'Error';
+        document.getElementById('reportCount').textContent = 'Error';
+        document.getElementById('reportAvg').textContent = 'Error';
+        document.getElementById('reportTableBody').innerHTML = `
+            <tr class="no-data">
+                <td colspan="8">
+                    <div style="padding: 30px; text-align: center;">
+                        <p style="color: var(--danger);">❌ Failed to load report</p>
+                        <p style="font-size: 12px; color: var(--text-muted);">${error.message}</p>
+                        <p style="font-size: 11px; color: var(--text-muted);">
+                            This may happen if you need to create a composite index in Firebase.
+                            <br>Check the browser console (F12) for a link to create the required index.
+                        </p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        
+        BashanPOS.showNotification('Failed to load report. Check console for details.', 'error');
+    }
+}
     exportCSV() {
         if (!this.currentReportData || this.currentReportData.length === 0) {
             BashanPOS.showNotification('No data to export', 'warning');
