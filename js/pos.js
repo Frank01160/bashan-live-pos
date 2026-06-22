@@ -1008,21 +1008,41 @@ updateCartItemQuantity(index, value) {
             <polyline points="20 6 9 17 4 12"/>
         </svg>
     `;
+}showSuccessModal() {
+    const sale = this.lastSale;
+    if (!sale) return;
+    
+    const itemsList = sale.items.map(item => {
+        let qtyDisplay = '';
+        switch(item.uom) {
+            case 'kg': qtyDisplay = `${(item.qtyKg || 0).toFixed(1)}kg`; break;
+            case 'bags': qtyDisplay = `${item.qty} bags`; break;
+            case 'litres': qtyDisplay = `${item.qty.toFixed(2)} L`; break;
+            case 'ml': qtyDisplay = `${item.qty.toFixed(0)} mL`; break;
+            case 'pieces': qtyDisplay = `${item.qty} pcs`; break;
+            case 'grams': qtyDisplay = `${item.qty}g`; break;
+            case 'sachets': qtyDisplay = `${item.qty} sachets`; break;
+            case 'cartons': qtyDisplay = `${item.qty} cartons`; break;
+            case 'rolls': qtyDisplay = `${item.qty} rolls`; break;
+            case 'metres': qtyDisplay = `${item.qty.toFixed(2)} m`; break;
+            default: qtyDisplay = `${item.qty}`;
+        }
+        return `${item.name}: ${qtyDisplay} - ${BashanPOS.formatCurrency(item.subtotal)}`;
+    }).join('<br>');
+    
+    document.getElementById('saleDetails').innerHTML = `
+        <p><strong>Receipt:</strong> ${sale.receiptNumber}</p>
+        <p><strong>Total:</strong> ${BashanPOS.formatCurrency(sale.total)}</p>
+        <p><strong>Items:</strong> ${sale.items.length}</p>
+        <p><strong>Payment:</strong> ${sale.paymentMethod}</p>
+        ${sale.customerName ? `<p><strong>Customer:</strong> ${sale.customerName}</p>` : ''}
+        <div style="margin-top:10px;font-size:12px;text-align:left;border-top:1px solid var(--card-border);padding-top:10px;">
+            ${itemsList}
+        </div>
+    `;
+    
+    document.getElementById('successModal').classList.add('active');
 }
-    showSuccessModal() {
-        const sale = this.lastSale;
-        if (!sale) return;
-        
-        document.getElementById('saleDetails').innerHTML = `
-            <p><strong>Receipt:</strong> ${sale.receiptNumber}</p>
-            <p><strong>Total:</strong> ${BashanPOS.formatCurrency(sale.total)}</p>
-            <p><strong>Items:</strong> ${sale.items.length}</p>
-            <p><strong>Payment:</strong> ${sale.paymentMethod}</p>
-            ${sale.customerName ? `<p><strong>Customer:</strong> ${sale.customerName}</p>` : ''}
-        `;
-        
-        document.getElementById('successModal').classList.add('active');
-    }
     
     newSale() {
         document.getElementById('successModal').classList.remove('active');
@@ -1051,68 +1071,118 @@ updateCartItemQuantity(index, value) {
         }
     }
     
-    // ============ RECEIPT ============
-    generateReceiptHTML(sale = null) {
-        if (!sale) sale = this.lastSale;
-        if (!sale) return '';
-        
-        const settings = this.settings || {};
-        const date = sale.timestamp ? new Date(sale.timestamp) : new Date();
-        
-        return `
-            <div style="font-family: monospace; max-width: 300px; padding: 10px; font-size: 12px;">
-                <div style="text-align: center; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 16px;">${settings.businessName || 'Bashan Livestock Feeds'}</h2>
-                    <p style="margin: 5px 0; font-size: 11px;">${settings.businessAddress || ''}</p>
-                    <p style="margin: 5px 0; font-size: 11px;">Tel: ${settings.businessPhone || ''}</p>
-                    <hr style="border: 1px dashed #ccc;">
-                </div>
-                
-                <p><strong>Receipt:</strong> ${sale.receiptNumber}</p>
-                <p><strong>Date:</strong> ${date.toLocaleString('en-KE')}</p>
-                <p><strong>Seller:</strong> ${sale.sellerName}</p>
-                ${sale.customerName ? `<p><strong>Customer:</strong> ${sale.customerName}</p>` : ''}
-                
+    // ============ RECEIPT ============generateReceiptHTML(sale = null) {
+    if (!sale) sale = this.lastSale;
+    if (!sale) return '';
+    
+    const settings = this.settings || {};
+    const date = sale.timestamp ? new Date(sale.timestamp) : new Date();
+    
+    return `
+        <div style="font-family: monospace; max-width: 300px; padding: 10px; font-size: 12px;">
+            <div style="text-align: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 16px;">${settings.businessName || 'Bashan Livestock Feeds'}</h2>
+                <p style="margin: 5px 0; font-size: 11px;">${settings.businessAddress || ''}</p>
+                <p style="margin: 5px 0; font-size: 11px;">Tel: ${settings.businessPhone || ''}</p>
                 <hr style="border: 1px dashed #ccc;">
-                
-                <table style="width: 100%; font-size: 11px;">
-                    <thead>
-                        <tr style="border-bottom: 1px solid #ccc;">
-                            <th style="text-align: left;">Item</th>
-                            <th style="text-align: right;">Qty</th>
-                            <th style="text-align: right;">Price</th>
-                            <th style="text-align: right;">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${sale.items.map(item => `
-                            <tr>
-                                <td>${item.name}</td>
-                                <td style="text-align: right;">${item.qtyKg.toFixed(1)}kg</td>
-                                <td style="text-align: right;">${item.pricePerKg}</td>
-                                <td style="text-align: right;">${BashanPOS.formatCurrency(item.subtotal)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                
-                <hr style="border: 1px dashed #ccc;">
-                
-                <p style="text-align: right;"><strong>Subtotal:</strong> ${BashanPOS.formatCurrency(sale.subtotal)}</p>
-                <p style="text-align: right;"><strong>Discount:</strong> -${BashanPOS.formatCurrency(sale.discountKsh)}</p>
-                <p style="text-align: right; font-size: 14px;"><strong>TOTAL:</strong> ${BashanPOS.formatCurrency(sale.total)}</p>
-                
-                <p style="margin-top: 10px;"><strong>Payment:</strong> ${sale.paymentMethod}</p>
-                
-                <hr style="border: 1px dashed #ccc;">
-                
-                <p style="text-align: center; font-size: 10px; margin-top: 15px;">
-                    Thank you for your business!<br>
-                    ${settings.receiptFooter || 'Quality Livestock Feeds'}
-                </p>
             </div>
-        `;
-    }
+            
+            <p><strong>Receipt:</strong> ${sale.receiptNumber}</p>
+            <p><strong>Date:</strong> ${date.toLocaleString('en-KE')}</p>
+            <p><strong>Seller:</strong> ${sale.sellerName}</p>
+            ${sale.customerName ? `<p><strong>Customer:</strong> ${sale.customerName}</p>` : ''}
+            
+            <hr style="border: 1px dashed #ccc;">
+            
+            <table style="width: 100%; font-size: 11px;">
+                <thead>
+                    <tr style="border-bottom: 1px solid #ccc;">
+                        <th style="text-align: left;">Item</th>
+                        <th style="text-align: right;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sale.items.map(item => {
+                        let qtyDisplay = '';
+                        let priceDisplay = '';
+                        
+                        switch(item.uom) {
+                            case 'kg':
+                                qtyDisplay = (item.qtyKg || 0).toFixed(1) + 'kg';
+                                priceDisplay = item.pricePerKg || '';
+                                break;
+                            case 'bags':
+                                qtyDisplay = item.qty + ' bags';
+                                priceDisplay = item.pricePerBag || '';
+                                break;
+                            case 'litres':
+                                qtyDisplay = (item.qty || 0).toFixed(2) + ' L';
+                                priceDisplay = item.pricePerLitre || '';
+                                break;
+                            case 'ml':
+                                qtyDisplay = (item.qty || 0).toFixed(0) + ' mL';
+                                priceDisplay = item.pricePer100ml || '';
+                                break;
+                            case 'pieces':
+                                qtyDisplay = item.qty + ' pcs';
+                                priceDisplay = item.pricePerPiece || '';
+                                break;
+                            case 'grams':
+                                qtyDisplay = item.qty + 'g';
+                                priceDisplay = item.pricePerGram || '';
+                                break;
+                            case 'sachets':
+                                qtyDisplay = item.qty + ' sachets';
+                                priceDisplay = item.pricePerSachet || '';
+                                break;
+                            case 'cartons':
+                                qtyDisplay = item.qty + ' cartons';
+                                priceDisplay = item.pricePerCarton || '';
+                                break;
+                            case 'rolls':
+                                qtyDisplay = item.qty + ' rolls';
+                                priceDisplay = item.pricePerRoll || '';
+                                break;
+                            case 'metres':
+                                qtyDisplay = (item.qty || 0).toFixed(2) + ' m';
+                                priceDisplay = item.pricePerMetre || '';
+                                break;
+                            default:
+                                qtyDisplay = item.qty || '';
+                                priceDisplay = '';
+                        }
+                        
+                        return `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td style="text-align: right;">${qtyDisplay}</td>
+                            <td style="text-align: right;">${priceDisplay}</td>
+                            <td style="text-align: right;">${BashanPOS.formatCurrency(item.subtotal)}</td>
+                        </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            
+            <hr style="border: 1px dashed #ccc;">
+            
+            <p style="text-align: right;"><strong>Subtotal:</strong> ${BashanPOS.formatCurrency(sale.subtotal)}</p>
+            ${sale.discountKsh > 0 ? `<p style="text-align: right;"><strong>Discount:</strong> -${BashanPOS.formatCurrency(sale.discountKsh)}</p>` : ''}
+            <p style="text-align: right; font-size: 14px;"><strong>TOTAL:</strong> ${BashanPOS.formatCurrency(sale.total)}</p>
+            
+            <p style="margin-top: 10px;"><strong>Payment:</strong> ${sale.paymentMethod}</p>
+            
+            <hr style="border: 1px dashed #ccc;">
+            
+            <p style="text-align: center; font-size: 10px; margin-top: 15px;">
+                Thank you for your business!<br>
+                ${settings.receiptFooter || 'Quality Products'}
+            </p>
+        </div>
+    `;
+}
     
     printReceipt() {
         const html = this.generateReceiptHTML();
