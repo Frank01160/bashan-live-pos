@@ -16,6 +16,17 @@ class InventorySystem {
     }
     
     async init() {
+    // Check if BashanPOS is loaded
+    if (!window.BashanPOS) {
+        console.error('❌ BashanPOS not loaded. Retrying in 1 second...');
+        setTimeout(() => this.init(), 1000);
+        return;
+    }
+    
+    this.user = BashanPOS.checkAuth();
+    if (!this.user) return;
+    
+    // ... rest of your init code
         this.user = BashanPOS.checkAuth();
         if (!this.user) return;
         
