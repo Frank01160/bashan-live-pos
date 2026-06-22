@@ -432,66 +432,70 @@ class InventorySystem {
         document.getElementById('productThreshold').value = product.lowStockThreshold || 100;
         
         document.getElementById('addProductModal').classList.add('active');
+    }async saveProduct() {
+    const editId = document.getElementById('editProductId').value;
+    const name = document.getElementById('productName').value.trim();
+    const category = document.getElementById('productCategory').value;
+    const pricePerKg = parseFloat(document.getElementById('productPrice').value);
+    const nguniaSize = parseInt(document.getElementById('productNguniaSize').value);
+    const initNgunias = parseFloat(document.getElementById('productInitNgunias').value) || 0;
+    const initKg = parseFloat(document.getElementById('productInitKg').value) || 0;
+    const threshold = parseInt(document.getElementById('productThreshold').value) || 100;
+    
+    // Validation
+    if (!name) {
+        BashanPOS.showNotification('Product name is required', 'warning');
+        return;
+    }
+    if (isNaN(pricePerKg) || pricePerKg <= 0) {
+        BashanPOS.showNotification('Valid price is required', 'warning');
+        return;
+    }
+    if (isNaN(nguniaSize) || nguniaSize <= 0) {
+        BashanPOS.showNotification('Valid ngunia size is required', 'warning');
+        return;
     }
     
-    async saveProduct() {
-        const editId = document.getElementById('editProductId').value;
-        const name = document.getElementById('productName').value.trim();
-        const category = document.getElementById('productCategory').value;
-        const pricePerKg = parseFloat(document.getElementById('productPrice').value);
-        const nguniaSize = parseInt(document.getElementById('productNguniaSize').value);
-        const initNgunias = parseFloat(document.getElementById('productInitNgunias').value) || 0;
-        const initKg = parseFloat(document.getElementById('productInitKg').value) || 0;
-        const threshold = parseInt(document.getElementById('productThreshold').value) || 100;
-        
-        // Validation
-        if (!name) {
-            BashanPOS.showNotification('Product name is required', 'warning');
-            return;
-        }
-        if (!pricePerKg || pricePerKg <= 0) {
-            BashanPOS.showNotification('Valid price is required', 'warning');
-            return;
-        }
-        if (!nguniaSize || nguniaSize <= 0) {
-            BashanPOS.showNotification('Valid ngunia size is required', 'warning');
-            return;
-        }
-        
-        const totalStock = (initNgunias * nguniaSize) + initKg;
-        
-        const productData = {
-            name: name,
-            category: category || '',
-            pricePerKg: pricePerKg,
-            nguniaKg: nguniaSize,
-            currentStockKg: totalStock,
-            lowStockThreshold: threshold,
-            archived: false,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (editId) {
-                // Update existing product
-                await BashanPOS.productsRef.doc(editId).update(productData);
-                BashanPOS.showNotification('Product updated successfully!', 'success');
-                BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name}`);
-            } else {
-                // Add new product
-                productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                await BashanPOS.productsRef.add(productData);
-                BashanPOS.showNotification('Product added successfully!', 'success');
-                BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name}`);
-            }
-            
-            this.closeProductModal();
-            await this.loadProducts();
-        } catch (error) {
-            console.error('Save product error:', error);
-            BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
-        }
+    const totalStock = (initNgunias * nguniaSize) + initKg;
+    
+    // FIX: Ensure totalStock is a valid number
+    if (isNaN(totalStock) || totalStock < 0) {
+        BashanPOS.showNotification('Invalid stock calculation', 'error');
+        return;
     }
+    
+    const productData = {
+        name: name,
+        category: category || '',
+        pricePerKg: pricePerKg,
+        nguniaKg: nguniaSize,
+        currentStockKg: totalStock,
+        lowStockThreshold: threshold,
+        archived: false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        if (editId) {
+            // Update existing product
+            await BashanPOS.productsRef.doc(editId).update(productData);
+            BashanPOS.showNotification('Product updated successfully!', 'success');
+            BashanPOS.logAudit('PRODUCT_EDIT', `Edited product: ${name}`);
+        } else {
+            // Add new product
+            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await BashanPOS.productsRef.add(productData);
+            BashanPOS.showNotification('Product added successfully!', 'success');
+            BashanPOS.logAudit('PRODUCT_ADD', `Added product: ${name}`);
+        }
+        
+        this.closeProductModal();
+        await this.loadProducts();
+    } catch (error) {
+        console.error('Save product error:', error);
+        BashanPOS.showNotification('Failed to save product: ' + error.message, 'error');
+    }
+}
     
     closeProductModal() {
         document.getElementById('addProductModal').classList.remove('active');
