@@ -1390,25 +1390,43 @@ updateCartItemQuantity(index, value) {
         }
     }
     
-    // ============ LOW STOCK ALERTS ============
-    checkLowStock() {
-        const threshold = this.settings?.lowStockThreshold || 100;
-        this.lowStockProducts = this.products.filter(p => 
-            p.currentStockKg <= threshold && p.currentStockKg > 0 && !p.archived
-        );
+ checkLowStock() {
+    const threshold = this.settings?.lowStockThreshold || 100;
+    this.lowStockProducts = this.products.filter(p => {
+        if (p.archived) return false;
         
-        const alertCount = document.getElementById('alertCount');
-        const alertBell = document.getElementById('alertBell');
+        const uom = p.uom || 'kg';
+        let stock = 0;
+        let productThreshold = p.lowStockThreshold || threshold;
         
-        if (this.lowStockProducts.length > 0) {
-            alertCount.textContent = this.lowStockProducts.length;
-            alertBell.classList.add('has-alerts');
-        } else {
-            alertCount.textContent = '';
-            alertBell.classList.remove('has-alerts');
+        switch(uom) {
+            case 'kg': stock = p.currentStockKg || 0; break;
+            case 'bags': stock = p.currentStockCount || 0; break;
+            case 'litres': stock = p.currentStockLitres || 0; break;
+            case 'ml': stock = p.currentStockMl || 0; break;
+            case 'pieces': stock = p.currentStockCount || 0; break;
+            case 'grams': stock = p.currentStockGrams || 0; break;
+            case 'sachets': stock = p.currentStockCount || 0; break;
+            case 'cartons': stock = p.currentStockCount || 0; break;
+            case 'rolls': stock = p.currentStockCount || 0; break;
+            case 'metres': stock = p.currentStockMetres || 0; break;
+            default: stock = p.currentStockKg || 0;
         }
-    }
+        
+        return stock <= productThreshold && stock > 0;
+    });
     
+    const alertCount = document.getElementById('alertCount');
+    const alertBell = document.getElementById('alertBell');
+    
+    if (this.lowStockProducts.length > 0) {
+        alertCount.textContent = this.lowStockProducts.length;
+        alertBell.classList.add('has-alerts');
+    } else {
+        alertCount.textContent = '';
+        alertBell.classList.remove('has-alerts');
+    }
+}
     toggleStockAlerts() {
         const popup = document.getElementById('stockAlertPopup');
         
