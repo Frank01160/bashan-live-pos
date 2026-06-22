@@ -320,32 +320,35 @@ setupUI() {
                 if (product) this.addToCart(product);
             });
         });
-    }
+    }createProductCard(product) {
+    // FIX: Ensure numeric values are valid
+    const nguniaSize = (product.nguniaKg && !isNaN(product.nguniaKg)) ? product.nguniaKg : (this.settings?.nguniaDefault || 1000);
+    const currentStock = (product.currentStockKg && !isNaN(product.currentStockKg)) ? product.currentStockKg : 0;
+    const lowStockThreshold = (product.lowStockThreshold && !isNaN(product.lowStockThreshold)) ? product.lowStockThreshold : 100;
+    const pricePerKg = (product.pricePerKg && !isNaN(product.pricePerKg)) ? product.pricePerKg : 0;
     
-    createProductCard(product) {
-        const nguniaSize = product.nguniaKg || this.settings?.nguniaDefault || 1000;
-        const isLowStock = product.currentStockKg <= (product.lowStockThreshold || 100);
-        const isSoldOut = product.currentStockKg <= 0;
-        const stockPercentage = Math.min(100, (product.currentStockKg / (nguniaSize * 5)) * 100);
-        
-        let stockBarClass = 'good';
-        if (stockPercentage < 20) stockBarClass = 'low';
-        else if (stockPercentage < 50) stockBarClass = 'medium';
-        
-        return `
-            <div class="product-card ${isSoldOut ? 'sold-out' : ''} ${isLowStock ? 'low-stock' : ''}" 
-                 data-product-id="${product.id}">
-                ${isLowStock && !isSoldOut ? '<span class="low-stock-badge">Low</span>' : ''}
-                <div class="product-name">${product.name}</div>
-                <div class="product-category">${product.category || 'Uncategorized'}</div>
-                <div class="product-price">${BashanPOS.formatCurrency(product.pricePerKg)}<small>/kg</small></div>
-                <div class="product-stock">${BashanPOS.formatStock(product.currentStockKg, nguniaSize)}</div>
-                <div class="stock-bar">
-                    <div class="stock-bar-fill ${stockBarClass}" style="width: ${stockPercentage}%"></div>
-                </div>
+    const isLowStock = currentStock <= lowStockThreshold;
+    const isSoldOut = currentStock <= 0;
+    const stockPercentage = Math.min(100, Math.max(0, (currentStock / (nguniaSize * 5)) * 100));
+    
+    let stockBarClass = 'good';
+    if (stockPercentage < 20) stockBarClass = 'low';
+    else if (stockPercentage < 50) stockBarClass = 'medium';
+    
+    return `
+        <div class="product-card ${isSoldOut ? 'sold-out' : ''} ${isLowStock && !isSoldOut ? 'low-stock' : ''}" 
+             data-product-id="${product.id}">
+            ${isLowStock && !isSoldOut ? '<span class="low-stock-badge">Low</span>' : ''}
+            <div class="product-name">${product.name}</div>
+            <div class="product-category">${product.category || 'Uncategorized'}</div>
+            <div class="product-price">${BashanPOS.formatCurrency(pricePerKg)}<small>/kg</small></div>
+            <div class="product-stock">${BashanPOS.formatStock(currentStock, nguniaSize)}</div>
+            <div class="stock-bar">
+                <div class="stock-bar-fill ${stockBarClass}" style="width: ${stockPercentage}%"></div>
             </div>
-        `;
-    }
+        </div>
+    `;
+}
     
     filterProducts(searchTerm) {
         this.renderProducts(searchTerm);
